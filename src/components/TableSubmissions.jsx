@@ -4,11 +4,9 @@ import { useEffect, useState } from "react";
 import { ArrowDownIcon, ArrowUpIcon, BarChartIcon } from "@radix-ui/react-icons";
 import Pagination from "./Pagination";
 import { ratingColor } from "../utils/ratingColor";
-import { useMarkedProblems } from "../hooks/useMarkedProblems";
 
-export default function TableSubmissions({ data }) {
+export default function TableSubmissions({ data, toggle, isMarked }) {
   const [tempq, setTempq] = useState(data);
-  const [, toggle, isMarked] = useMarkedProblems();
 
   function sortAsc() {
     const sortedTempq = [...tempq].sort((a, b) => {

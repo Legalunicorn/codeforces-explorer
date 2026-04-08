@@ -13,7 +13,6 @@ export default function TabSubmissions({ setStyleBlur }) {
   const [marked, toggle, isMarked, markAll, clearAll] = useMarkedProblems();
   const { id: username } = useParams();
 
-  // Derive the problem keys for this user's solved problems
   const solvedKeys = problemsSolved.map((p) => `${p.contestId}-${p.index}`);
   const markedCount = Object.keys(marked).length;
 
@@ -25,7 +24,6 @@ export default function TabSubmissions({ setStyleBlur }) {
     <div>
       {/* ── Action bar ── */}
       <div className="mb-3 flex items-center gap-3">
-        {/* Mark all solved — with confirmation */}
         <AlertDialog.Root>
           <AlertDialog.Trigger>
             <Button size="1" variant="soft" color="indigo">
@@ -53,7 +51,6 @@ export default function TabSubmissions({ setStyleBlur }) {
           </AlertDialog.Content>
         </AlertDialog.Root>
 
-        {/* Clear all — with confirmation, only shown if anything is marked */}
         {markedCount > 0 && (
           <AlertDialog.Root>
             <AlertDialog.Trigger>
@@ -97,16 +94,16 @@ export default function TabSubmissions({ setStyleBlur }) {
           </Tabs.Content>
 
           <Tabs.Content value="psolved">
-            <TableSubmissions data={problemsSolved} />
+            <TableSubmissions data={problemsSolved} toggle={toggle} isMarked={isMarked} />
           </Tabs.Content>
 
           <Tabs.Content value="correct">
-            <TableSubmissions data={correctSubmissions} />
+            <TableSubmissions data={correctSubmissions} toggle={toggle} isMarked={isMarked} />
           </Tabs.Content>
 
           <Tabs.Content value="skipped">
             <Text size="2">
-              <TableSubmissions data={skippedSubmissions} />
+              <TableSubmissions data={skippedSubmissions} toggle={toggle} isMarked={isMarked} />
             </Text>
           </Tabs.Content>
         </Box>
