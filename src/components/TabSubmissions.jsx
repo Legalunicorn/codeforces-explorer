@@ -1,15 +1,88 @@
-import { Box, Tabs, Text } from "@radix-ui/themes";
+// src/components/TabSubmissions.jsx
+import { Box, Tabs, Text, AlertDialog, Button, Flex } from "@radix-ui/themes";
 import TableSubmissions from "./TableSubmissions";
 import { useSelector } from "react-redux";
 import Profile from "./Profile/Profile";
+import { useMarkedProblems } from "../hooks/useMarkedProblems";
+import { useParams } from "react-router-dom";
 
 export default function TabSubmissions({ setStyleBlur }) {
   const { problemsSolved, correctSubmissions, skippedSubmissions } =
     useSelector((store) => store.user);
-  // setStyleBlur(false);
+
+  const [marked, toggle, isMarked, markAll, clearAll] = useMarkedProblems();
+  const { id: username } = useParams();
+
+  // Derive the problem keys for this user's solved problems
+  const solvedKeys = problemsSolved.map((p) => `${p.contestId}-${p.index}`);
+  const markedCount = Object.keys(marked).length;
+
+  function handleMarkAll() {
+    markAll(solvedKeys);
+  }
 
   return (
-    <div className={""}>
+    <div>
+      {/* ── Action bar ── */}
+      <div className="mb-3 flex items-center gap-3">
+        {/* Mark all solved — with confirmation */}
+        <AlertDialog.Root>
+          <AlertDialog.Trigger>
+            <Button size="1" variant="soft" color="indigo">
+              Mark all as solved ({solvedKeys.length} problems)
+            </Button>
+          </AlertDialog.Trigger>
+          <AlertDialog.Content maxWidth="420px">
+            <AlertDialog.Title>Mark all as solved?</AlertDialog.Title>
+            <AlertDialog.Description size="2">
+              This will mark all <strong>{solvedKeys.length} problems</strong> solved
+              by <strong>{username}</strong> as done in your local tracker.
+              <br /><br />
+              Your existing marks won't be removed — this only adds new ones.
+            </AlertDialog.Description>
+            <Flex gap="3" mt="4" justify="end">
+              <AlertDialog.Cancel>
+                <Button variant="soft" color="gray">Cancel</Button>
+              </AlertDialog.Cancel>
+              <AlertDialog.Action>
+                <Button variant="solid" color="indigo" onClick={handleMarkAll}>
+                  Yes, mark all
+                </Button>
+              </AlertDialog.Action>
+            </Flex>
+          </AlertDialog.Content>
+        </AlertDialog.Root>
+
+        {/* Clear all — with confirmation, only shown if anything is marked */}
+        {markedCount > 0 && (
+          <AlertDialog.Root>
+            <AlertDialog.Trigger>
+              <Button size="1" variant="soft" color="red">
+                Clear all marks ({markedCount})
+              </Button>
+            </AlertDialog.Trigger>
+            <AlertDialog.Content maxWidth="420px">
+              <AlertDialog.Title>Clear all marks?</AlertDialog.Title>
+              <AlertDialog.Description size="2">
+                This will remove all <strong>{markedCount} marks</strong> from
+                your local tracker. This cannot be undone.
+              </AlertDialog.Description>
+              <Flex gap="3" mt="4" justify="end">
+                <AlertDialog.Cancel>
+                  <Button variant="soft" color="gray">Cancel</Button>
+                </AlertDialog.Cancel>
+                <AlertDialog.Action>
+                  <Button variant="solid" color="red" onClick={clearAll}>
+                    Yes, clear all
+                  </Button>
+                </AlertDialog.Action>
+              </Flex>
+            </AlertDialog.Content>
+          </AlertDialog.Root>
+        )}
+      </div>
+
+      {/* ── Tabs ── */}
       <Tabs.Root defaultValue="psolved">
         <Tabs.List>
           <Tabs.Trigger value="profile">Profile</Tabs.Trigger>
@@ -34,7 +107,6 @@ export default function TabSubmissions({ setStyleBlur }) {
           <Tabs.Content value="skipped">
             <Text size="2">
               <TableSubmissions data={skippedSubmissions} />
-              {/* <TableSkipped /> */}
             </Text>
           </Tabs.Content>
         </Box>

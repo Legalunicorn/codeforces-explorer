@@ -12,13 +12,9 @@ function load() {
 }
 
 /**
- * Returns [markedMap, toggle, isMarked]
+ * Returns [markedMap, toggle, isMarked, markAll, clearAll]
  *
- * markedMap  – { "1480-C": true, ... }
- * toggle(id) – flips the marked state for a problem key
- * isMarked(id) – returns boolean
- *
- * Problem key convention: `${contestId}-${index}`  e.g. "1480-C"
+ * problemKey convention: `${contestId}-${index}`  e.g. "1480-C"
  */
 export function useMarkedProblems() {
   const [marked, setMarked] = useState(load);
@@ -41,5 +37,22 @@ export function useMarkedProblems() {
     [marked],
   );
 
-  return [marked, toggle, isMarked];
+  // Merges new keys into existing marks (doesn't wipe previous ones)
+  const markAll = useCallback((problemKeys) => {
+    setMarked((prev) => {
+      const next = { ...prev };
+      for (const key of problemKeys) {
+        next[key] = true;
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const clearAll = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY);
+    setMarked({});
+  }, []);
+
+  return [marked, toggle, isMarked, markAll, clearAll];
 }

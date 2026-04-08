@@ -1,24 +1,14 @@
 // src/components/TableSubmissions.jsx
-import {
-  Button,
-  Code,
-  DropdownMenu,
-  Link,
-  Table,
-} from "@radix-ui/themes";
+import { Button, Code, DropdownMenu, Link, Table } from "@radix-ui/themes";
 import { useEffect, useState } from "react";
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  BarChartIcon,
-} from "@radix-ui/react-icons";
+import { ArrowDownIcon, ArrowUpIcon, BarChartIcon } from "@radix-ui/react-icons";
 import Pagination from "./Pagination";
 import { ratingColor } from "../utils/ratingColor";
 import { useMarkedProblems } from "../hooks/useMarkedProblems";
 
 export default function TableSubmissions({ data }) {
   const [tempq, setTempq] = useState(data);
-  const [marked, toggle, isMarked] = useMarkedProblems();
+  const [, toggle, isMarked] = useMarkedProblems();
 
   function sortAsc() {
     const sortedTempq = [...tempq].sort((a, b) => {
@@ -67,10 +57,7 @@ export default function TableSubmissions({ data }) {
         <Table.Header>
           <Table.Row style={{ color: "#cccccc" }}>
             <Table.ColumnHeaderCell>No.</Table.ColumnHeaderCell>
-            {/* Checkbox column header – the ✓ icon hints at its purpose */}
-            <Table.ColumnHeaderCell title="Mark as previously solved">
-              ✓
-            </Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell title="Previously solved by you">✓</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Problem</Table.ColumnHeaderCell>
             <Table.Cell px={"0"}>
               <DropdownMenu.Root modal={false}>
@@ -81,22 +68,13 @@ export default function TableSubmissions({ data }) {
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content size={"1"}>
-                  <DropdownMenu.Item
-                    shortcut={<BarChartIcon />}
-                    onClick={sortDefault}
-                  >
+                  <DropdownMenu.Item shortcut={<BarChartIcon />} onClick={sortDefault}>
                     Default
                   </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    shortcut={<ArrowDownIcon />}
-                    onClick={sortAsc}
-                  >
+                  <DropdownMenu.Item shortcut={<ArrowDownIcon />} onClick={sortAsc}>
                     Ascending
                   </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    shortcut={<ArrowUpIcon />}
-                    onClick={sortDesc}
-                  >
+                  <DropdownMenu.Item shortcut={<ArrowUpIcon />} onClick={sortDesc}>
                     Descending
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
@@ -117,22 +95,18 @@ export default function TableSubmissions({ data }) {
                 key={it.id}
                 style={{
                   color: "#888888",
-                  // Subtle visual dimming for already-marked rows
-                  opacity: done ? 0.45 : 1,
+                  opacity: done ? 0.4 : 1,
                   transition: "opacity 0.15s ease",
                 }}
               >
-                <Table.Cell width={"1px"}>
-                  {pageNo * pageSize + index + 1}
-                </Table.Cell>
+                <Table.Cell width={"1px"}>{pageNo * pageSize + index + 1}</Table.Cell>
 
-                {/* ── Checkbox cell ── */}
                 <Table.Cell width={"1px"}>
                   <input
                     type="checkbox"
                     checked={done}
                     onChange={() => toggle(problemKey)}
-                    title={done ? "Unmark as solved" : "Mark as solved"}
+                    title={done ? "Unmark" : "Mark as solved"}
                     style={{
                       cursor: "pointer",
                       accentColor: "#3e63dd",
