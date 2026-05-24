@@ -5,26 +5,25 @@ import { ArrowDownIcon, ArrowUpIcon, BarChartIcon } from "@radix-ui/react-icons"
 import Pagination from "./Pagination";
 import { ratingColor } from "../utils/ratingColor";
 
-export default function TableSubmissions({ data, isSolved }) {
+export default function TableSubmissions({ data, isSolved, maskRating = false }) {
   const [tempq, setTempq] = useState(data);
 
   useEffect(() => {
     setTempq(data);
+    setPageNo(0);
   }, [data]);
 
   function sortAsc() {
-    const sortedTempq = [...tempq].sort((a, b) => {
+    setTempq([...tempq].sort((a, b) => {
       if (!a.rating && !b.rating) return 0;
       if (!a.rating) return 1;
       if (!b.rating) return -1;
       return a.rating - b.rating;
-    });
-    setTempq(sortedTempq);
+    }));
   }
 
   function sortDesc() {
-    const sortedTempq = [...tempq].sort((a, b) => b.rating - a.rating);
-    setTempq(sortedTempq);
+    setTempq([...tempq].sort((a, b) => b.rating - a.rating));
   }
 
   function sortDefault() {
@@ -37,8 +36,7 @@ export default function TableSubmissions({ data, isSolved }) {
 
   useEffect(() => {
     const start = pageNo * pageSize;
-    const end = start + pageSize;
-    setPage(tempq.slice(start, end));
+    setPage(tempq.slice(start, start + pageSize));
   }, [tempq, pageNo, pageSize]);
 
   return (
@@ -65,20 +63,13 @@ export default function TableSubmissions({ data, isSolved }) {
               <DropdownMenu.Root modal={false}>
                 <DropdownMenu.Trigger>
                   <Button size={"1"} variant="soft" color="gray">
-                    Options
-                    <DropdownMenu.TriggerIcon />
+                    Rating <DropdownMenu.TriggerIcon />
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content size={"1"}>
-                  <DropdownMenu.Item shortcut={<BarChartIcon />} onClick={sortDefault}>
-                    Default
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item shortcut={<ArrowDownIcon />} onClick={sortAsc}>
-                    Ascending
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item shortcut={<ArrowUpIcon />} onClick={sortDesc}>
-                    Descending
-                  </DropdownMenu.Item>
+                  <DropdownMenu.Item shortcut={<BarChartIcon />} onClick={sortDefault}>Default</DropdownMenu.Item>
+                  <DropdownMenu.Item shortcut={<ArrowDownIcon />} onClick={sortAsc}>Ascending</DropdownMenu.Item>
+                  <DropdownMenu.Item shortcut={<ArrowUpIcon />} onClick={sortDesc}>Descending</DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Root>
             </Table.Cell>
@@ -96,15 +87,16 @@ export default function TableSubmissions({ data, isSolved }) {
                 key={it.id}
                 style={{
                   color: "#888888",
-                  opacity: done ? 0.4 : 1,
-                  transition: "opacity 0.15s ease",
+                  opacity: done ? 0.55 : 1,
+                  backgroundColor: done ? "rgba(34, 197, 94, 0.07)" : "transparent",
+                  transition: "opacity 0.15s ease, background-color 0.15s ease",
                 }}
               >
                 <Table.Cell width={"1px"}>{pageNo * pageSize + index + 1}</Table.Cell>
 
                 <Table.Cell width={"1px"}>
                   {done && (
-                    <span style={{ color: "#3e63dd", fontSize: 13, fontWeight: 600 }}>
+                    <span style={{ color: "#22c55e", fontSize: 13, fontWeight: 700 }}>
                       ✓
                     </span>
                   )}
@@ -120,8 +112,19 @@ export default function TableSubmissions({ data, isSolved }) {
                   </Link>
                 </Table.RowHeaderCell>
 
-                <Table.Cell style={{ color: ratingColor(it.rating) }}>
-                  {it.rating ? it.rating : ""}
+                <Table.Cell style={{ color: maskRating ? "transparent" : ratingColor(it.rating) }}>
+                  {maskRating ? (
+                    <span style={{
+                      display: "inline-block",
+                      width: "2.5rem",
+                      height: "0.85em",
+                      backgroundColor: "#333",
+                      borderRadius: "3px",
+                      verticalAlign: "middle",
+                    }} />
+                  ) : (
+                    it.rating ? it.rating : ""
+                  )}
                 </Table.Cell>
 
                 <Table.Cell>

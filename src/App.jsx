@@ -1,6 +1,7 @@
+// src/App.jsx
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import AppLayout from "./ui/AppLayout";
-import Home from "./pages/Home";
+import Problemset from "./pages/Problemset";
 import User from "./pages/User";
 import ErrorPage from "./pages/ErrorPage";
 import Solutions from "./pages/Solutions";
@@ -13,7 +14,7 @@ const router = createBrowserRouter(
       children: [
         {
           path: "/",
-          element: <Home />,
+          element: <Problemset />,
           errorElement: <ErrorPage />,
         },
         {
