@@ -17,24 +17,21 @@ function saveFilters(filters) {
   } catch {}
 }
 
-// tags semantics:
-//   null        → all selected / no tag filter (default)
-//   []          → nothing selected, nothing passes
-//   [...subset] → filter to problems with ≥1 matching tag
 export const defaultFilters = {
-  minRating: 800,
-  maxRating: 3500,
-  tags: null,
+  minRating:   800,
+  maxRating:   3500,
+  tags:        null,
   solveStatus: "all",
+  hideUnrated: false,
 };
 
 const savedFilters = loadFilters();
 
 const initialState = {
-  problems: [],
-  allTags: [],
+  problems:  [],
+  allTags:   [],
   isLoading: false,
-  errorMsg: "",
+  errorMsg:  "",
   filters: savedFilters
     ? { ...defaultFilters, ...savedFilters }
     : defaultFilters,
@@ -46,15 +43,15 @@ const problemsetSlice = createSlice({
   reducers: {
     fetchingProblems(state) {
       state.isLoading = true;
-      state.errorMsg = "";
+      state.errorMsg  = "";
     },
     setProblems(state, action) {
-      state.problems = action.payload.problems;
-      state.allTags = action.payload.allTags;
+      state.problems  = action.payload.problems;
+      state.allTags   = action.payload.allTags;
       state.isLoading = false;
     },
     setError(state, action) {
-      state.errorMsg = action.payload;
+      state.errorMsg  = action.payload;
       state.isLoading = false;
     },
     setFilters(state, action) {
@@ -71,10 +68,17 @@ const problemsetSlice = createSlice({
 export const { setFilters, resetFilters } = problemsetSlice.actions;
 export default problemsetSlice.reducer;
 
+function indexOrder(index) {
+  const letter = index.charCodeAt(0) - 65;
+  const suffix = parseInt(index.slice(1) || "0", 10);
+  return letter + suffix * 26;
+}
+
 export function fetchProblems() {
   return async function (dispatch, getState) {
     if (getState().problemset.problems.length > 0) return;
     dispatch({ type: "problemset/fetchingProblems" });
+
     try {
       const res = await fetch("https://codeforces.com/api/problemset.problems");
       if (!res.ok) throw new Error("Failed to fetch problemset");
@@ -97,7 +101,10 @@ export function fetchProblems() {
           ...p,
           solvedCount: statsMap[`${p.contestId}-${p.index}`] ?? 0,
         }))
-        .sort((a, b) => b.solvedCount - a.solvedCount);
+        .sort((a, b) => {
+          if (b.contestId !== a.contestId) return b.contestId - a.contestId;
+          return indexOrder(a.index) - indexOrder(b.index);
+        });
 
       dispatch({
         type: "problemset/setProblems",

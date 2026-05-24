@@ -8,26 +8,33 @@ import {
   MoonIcon,
   PersonIcon,
   SunIcon,
+  Cross2Icon,
 } from "@radix-ui/react-icons";
-import { Button, Popover, Text } from "@radix-ui/themes";
-import { useState } from "react";
+import { Button } from "@radix-ui/themes";
+import { useRef, useState } from "react";
 import { useViewerProblems } from "../hooks/useViewerProblems";
 
 export default function Header({ theme, toggleTheme }) {
   const { viewerHandle, saveHandle, isLoading, error } = useViewerProblems();
   const [input, setInput] = useState(viewerHandle);
-  const [open, setOpen] = useState(false);
+  const inputRef = useRef(null);
 
   function handleSave() {
-    saveHandle(input);
-    setOpen(false);
+    saveHandle(input.trim());
+    inputRef.current?.blur();
+  }
+
+  function handleClear() {
+    setInput("");
+    saveHandle("");
   }
 
   return (
     <div className="z-10 flex items-center justify-between border-[#5a5e6750] px-4 py-3">
+      {/* ── Left: logo + github ── */}
       <div className="flex items-center justify-center gap-x-2">
         <Link
-          className="hover: flex w-fit cursor-pointer select-none gap-x-2 rounded-sm p-1 font-spaceMono text-sm transition-all duration-200 hover:bg-[#70707030]"
+          className="flex w-fit cursor-pointer select-none gap-x-2 rounded-sm p-1 font-spaceMono text-sm transition-all duration-200 hover:bg-[#70707030]"
           to={"/"}
         >
           <img className="w-5" src={header} alt="" />
@@ -45,11 +52,13 @@ export default function Header({ theme, toggleTheme }) {
         </Button>
       </div>
 
+      {/* ── Center: search ── */}
       <div className="w-2/6">
         <SearchBar />
       </div>
 
-      <div className="flex items-center justify-center gap-x-3">
+      {/* ── Right: handle input + extension + theme ── */}
+      <div className="flex items-center justify-center gap-x-2">
         <Link
           target="_blank"
           to="https://github.com/hitarth-gg/codeforces-explorer-extension"
@@ -59,81 +68,76 @@ export default function Header({ theme, toggleTheme }) {
           </Button>
         </Link>
 
-        {/* ── Viewer handle popover ── */}
-        <Popover.Root open={open} onOpenChange={setOpen}>
-          <Popover.Trigger>
-            <Button
-              color={viewerHandle ? "indigo" : "gray"}
-              variant={viewerHandle ? "soft" : "ghost"}
-              size={"1"}
-              title="Set your CF handle to highlight problems you've already solved"
-            >
-              <PersonIcon width={15} height={15} />
-              {viewerHandle ? (
-                <span className="max-w-[80px] truncate text-[.75rem]">
-                  {viewerHandle}
-                </span>
-              ) : (
-                <span className="text-[.75rem]">Your handle</span>
-              )}
-            </Button>
-          </Popover.Trigger>
-          <Popover.Content width="260px" side="bottom" align="end">
-            <div className="flex flex-col gap-2 p-1">
-              <Text size="1" weight="medium">
-                Your Codeforces handle
-              </Text>
-              <Text size="1" color="gray">
-                Problems you've already solved will be dimmed when browsing
-                other users.
-              </Text>
-              <div className="flex gap-2">
-                <input
-                  autoFocus
-                  className="flex-1 rounded border border-[#43484e] bg-transparent px-2 py-1 text-sm outline-none focus:border-indigo-500"
-                  placeholder="e.g. tourist"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSave()}
-                />
-                <Button
-                  size="1"
-                  variant="soft"
-                  color="indigo"
-                  onClick={handleSave}
-                  disabled={isLoading}
-                >
-                  {isLoading ? "..." : "Set"}
-                </Button>
-              </div>
-              {error && (
-                <Text size="1" color="red">
-                  {error}
-                </Text>
-              )}
-              {viewerHandle && !isLoading && !error && (
-                <div className="flex items-center justify-between">
-                  <Text size="1" color="gray">
-                    Active:{" "}
-                    <span className="text-indigo-400">{viewerHandle}</span>
-                  </Text>
-                  <Button
-                    size="1"
-                    variant="ghost"
-                    color="red"
-                    onClick={() => {
-                      setInput("");
-                      saveHandle("");
-                      setOpen(false);
-                    }}
-                  >
-                    Clear
-                  </Button>
-                </div>
-              )}
+        {/* ── Inline handle input ── */}
+        <div className="group relative flex items-center">
+          {/* Tooltip */}
+          <div
+            className="
+              pointer-events-none absolute -bottom-9 right-0 z-50
+              whitespace-nowrap rounded bg-[#1c1c1c] px-2.5 py-1.5
+              text-xs text-[#ccc] shadow-lg ring-1 ring-[#333]
+              opacity-0 transition-opacity duration-150
+              group-focus-within:opacity-0 group-hover:opacity-100
+            "
+          >
+            Add your handle to mark problems you've already solved
+          </div>
+
+          <div
+            className={`
+              flex items-center gap-1 rounded border px-2 py-1 transition-all duration-150
+              ${
+                viewerHandle
+                  ? "border-indigo-500 bg-indigo-950/40"
+                  : "border-[#43484e] bg-transparent hover:border-[#666]"
+              }
+              focus-within:border-indigo-500 focus-within:bg-indigo-950/40
+            `}
+          >
+            <PersonIcon
+              width={13}
+              height={13}
+              className={viewerHandle ? "text-indigo-400" : "text-[#666]"}
+            />
+            <input
+              ref={inputRef}
+              className="w-24 bg-transparent text-[.78rem] text-white outline-none placeholder:text-[#555]"
+              placeholder="Your handle"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSave();
+                if (e.key === "Escape") inputRef.current?.blur();
+              }}
+              onBlur={() => {
+                // Save on blur if changed
+                if (input.trim() !== viewerHandle) handleSave();
+              }}
+            />
+            {/* Loading indicator */}
+            {isLoading && (
+              <span className="text-[10px] text-[#666]">…</span>
+            )}
+            {/* Clear button — only when a handle is active */}
+            {viewerHandle && !isLoading && (
+              <button
+                onClick={handleClear}
+                className="ml-0.5 rounded p-0.5 text-[#555] transition hover:text-rose-400"
+                tabIndex={-1}
+                title="Clear handle"
+              >
+                <Cross2Icon width={10} height={10} />
+              </button>
+            )}
+          </div>
+
+          {/* Error hint */}
+          {error && (
+            <div className="absolute -bottom-5 right-0 text-[10px] text-rose-400">
+              {error}
             </div>
-          </Popover.Content>
-        </Popover.Root>
+          )}
+        </div>
 
         <Button color="gray" variant="ghost" size={"1"} onClick={toggleTheme}>
           {theme === "dark" ? (

@@ -1,9 +1,17 @@
 // src/components/FilterModal.jsx
 import { Button, Dialog, Flex, Text } from "@radix-ui/themes";
-import { ChevronUpIcon, ChevronDownIcon, Cross2Icon, MixerHorizontalIcon } from "@radix-ui/react-icons";
+import {
+  ChevronUpIcon,
+  ChevronDownIcon,
+  Cross2Icon,
+  MixerHorizontalIcon,
+} from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { setFilters, defaultFilters } from "../context/problemset/problemsetSlice";
+import {
+  setFilters,
+  defaultFilters,
+} from "../context/problemset/problemsetSlice";
 import { useViewerProblems } from "../hooks/useViewerProblems";
 
 const RATING_MIN = 800;
@@ -16,7 +24,7 @@ const SOLVE_OPTIONS = [
   { value: "unsolved", label: "Unsolved" },
 ];
 
-// ── Rating input: text field + ▲▼ buttons ────────────────────────────────────
+// ── Rating input: text field + ▲▼ buttons ─────────────────────────────────
 function RatingInput({ label, value, onChange, clampMin, clampMax }) {
   const [raw, setRaw] = useState(String(value));
 
@@ -74,12 +82,6 @@ function RatingInput({ label, value, onChange, clampMin, clampMax }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tag state semantics (draft.tags):
-//   null         → all selected, all green, no filter applied
-//   []           → nothing selected, all gray, nothing passes tag filter
-//   [...subset]  → only those tags highlighted; filter to problems with ≥1 match
-// ─────────────────────────────────────────────────────────────────────────────
-
 export default function FilterModal({ filteredCount, totalCount }) {
   const dispatch = useDispatch();
   const { filters, allTags } = useSelector((store) => store.problemset);
@@ -112,9 +114,7 @@ export default function FilterModal({ filteredCount, totalCount }) {
   function toggleTag(tag) {
     setDraft((prev) => {
       if (prev.tags === null) {
-        // All selected → deselect just this one tag
         const next = allTags.filter((t) => t !== tag);
-        // If somehow everything still selected, stay at null
         return { ...prev, tags: next.length === allTags.length ? null : next };
       }
       const has = prev.tags.includes(tag);
@@ -122,25 +122,24 @@ export default function FilterModal({ filteredCount, totalCount }) {
         return { ...prev, tags: prev.tags.filter((t) => t !== tag) };
       } else {
         const next = [...prev.tags, tag];
-        // If all tags are now selected, collapse to null
         return { ...prev, tags: next.length === allTags.length ? null : next };
       }
     });
   }
 
-  // tag for display: green if null (all) or explicitly included
   function isTagSelected(tag) {
     return draft.tags === null || draft.tags.includes(tag);
   }
 
-  // active filter badge: tag filter is "active" only when it's a strict subset (not null/all)
   const hasTagFilter = filters.tags !== null;
   const activeFilterCount =
     (filters.minRating !== RATING_MIN || filters.maxRating !== RATING_MAX ? 1 : 0) +
     (hasTagFilter ? 1 : 0) +
-    (filters.solveStatus !== "all" ? 1 : 0);
+    (filters.solveStatus !== "all" ? 1 : 0) +
+    (filters.hideUnrated ? 1 : 0);
 
-  const draftSelectedCount = draft.tags === null ? allTags.length : draft.tags.length;
+  const draftSelectedCount =
+    draft.tags === null ? allTags.length : draft.tags.length;
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
@@ -161,10 +160,17 @@ export default function FilterModal({ filteredCount, totalCount }) {
         </Button>
       </Dialog.Trigger>
 
-      <Dialog.Content style={{ maxWidth: 560, maxHeight: "85vh", overflowY: "auto" }}>
+      <Dialog.Content
+        style={{ maxWidth: 560, maxHeight: "85vh", overflowY: "auto" }}
+      >
         <div className="flex items-center justify-between">
           <Dialog.Title mb="0">Filter Problems</Dialog.Title>
-          <Button size="1" variant="ghost" color="gray" onClick={() => setOpen(false)}>
+          <Button
+            size="1"
+            variant="ghost"
+            color="gray"
+            onClick={() => setOpen(false)}
+          >
             <Cross2Icon />
           </Button>
         </div>
@@ -174,19 +180,23 @@ export default function FilterModal({ filteredCount, totalCount }) {
           {/* ── Solve status (viewer only) ── */}
           {viewerHandle && (
             <div>
-              <Text size="2" weight="medium" className="mb-2 block">Solve Status</Text>
+              <Text size="2" weight="medium" className="mb-2 block">
+                Solve Status
+              </Text>
               <div className="flex gap-2">
                 {SOLVE_OPTIONS.map(({ value, label }) => (
                   <button
                     key={value}
-                    onClick={() => setDraft((prev) => ({ ...prev, solveStatus: value }))}
+                    onClick={() =>
+                      setDraft((prev) => ({ ...prev, solveStatus: value }))
+                    }
                     className={`rounded px-3 py-1.5 text-xs font-semibold transition-all duration-100 ring-1 ${
                       draft.solveStatus === value
                         ? value === "solved"
                           ? "bg-[#1a5c35] text-white ring-[#2d8a52]"
                           : value === "unsolved"
-                          ? "bg-[#5c1a1a] text-white ring-[#8a2d2d]"
-                          : "bg-[#1e3a5c] text-white ring-[#2d5c8a]"
+                            ? "bg-[#5c1a1a] text-white ring-[#8a2d2d]"
+                            : "bg-[#1e3a5c] text-white ring-[#2d5c8a]"
                         : "bg-[#1e1e1e] text-[#777] ring-[#333] hover:text-white"
                     }`}
                   >
@@ -199,8 +209,10 @@ export default function FilterModal({ filteredCount, totalCount }) {
 
           {/* ── Rating range ── */}
           <div>
-            <Text size="2" weight="medium" className="mb-2 block">Rating Range</Text>
-            <div className="flex items-center gap-3 flex-wrap">
+            <Text size="2" weight="medium" className="mb-2 block">
+              Rating Range
+            </Text>
+            <div className="flex flex-wrap items-center gap-3">
               <RatingInput
                 label="Min"
                 value={draft.minRating}
@@ -214,7 +226,9 @@ export default function FilterModal({ filteredCount, totalCount }) {
                 clampMin={RATING_MIN}
                 clampMax={RATING_MAX}
               />
-              <Text size="1" color="gray">—</Text>
+              <Text size="1" color="gray">
+                —
+              </Text>
               <RatingInput
                 label="Max"
                 value={draft.maxRating}
@@ -232,12 +246,33 @@ export default function FilterModal({ filteredCount, totalCount }) {
                 {draft.minRating} – {draft.maxRating}
               </Text>
             </div>
+
+            {/* ── Hide unrated toggle ── */}
+            <div className="mt-3">
+              <button
+                onClick={() =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    hideUnrated: !prev.hideUnrated,
+                  }))
+                }
+                className={`rounded px-3 py-1.5 text-xs font-semibold transition-all duration-100 ring-1 ${
+                  draft.hideUnrated
+                    ? "bg-[#1a5c35] text-white ring-[#2d8a52]"
+                    : "bg-[#1e1e1e] text-[#777] ring-[#333] hover:text-white"
+                }`}
+              >
+                Hide problems without rating
+              </button>
+            </div>
           </div>
 
           {/* ── Tags ── */}
           <div>
-            <div className="mb-2 flex items-center gap-2 flex-wrap">
-              <Text size="2" weight="medium">Tags</Text>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <Text size="2" weight="medium">
+                Tags
+              </Text>
               <Text size="1" color="gray">
                 ({draftSelectedCount} / {allTags.length})
               </Text>
@@ -275,11 +310,21 @@ export default function FilterModal({ filteredCount, totalCount }) {
         {/* ── Footer ── */}
         <Flex gap="3" mt="5" justify="between" align="center">
           <Text size="1" color="gray">
-            {filteredCount.toLocaleString()} / {totalCount.toLocaleString()} problems
+            {filteredCount.toLocaleString()} / {totalCount.toLocaleString()}{" "}
+            problems
           </Text>
           <Flex gap="2">
-            <Button size="2" variant="soft" color="gray" onClick={handleReset}>Reset</Button>
-            <Button size="2" variant="solid" color="indigo" onClick={applyFilters}>Apply</Button>
+            <Button size="2" variant="soft" color="gray" onClick={handleReset}>
+              Reset
+            </Button>
+            <Button
+              size="2"
+              variant="solid"
+              color="indigo"
+              onClick={applyFilters}
+            >
+              Apply
+            </Button>
           </Flex>
         </Flex>
       </Dialog.Content>
