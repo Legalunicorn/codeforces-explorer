@@ -36,7 +36,7 @@ export default function Header({ theme, toggleTheme }) {
         <DividerVerticalIcon width={20} height={20} color="#ffffff40" />
         <Button color="gray" variant="ghost" size={"1"}>
           <a
-            href="https://github.com/hitarth-gg/codeforces-explorer"
+            href="https://github.com/legalunicorn/codeforces-explorer"
             target="_blank"
             rel="noreferrer"
           >
