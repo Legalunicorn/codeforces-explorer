@@ -5,8 +5,12 @@ import { ArrowDownIcon, ArrowUpIcon, BarChartIcon } from "@radix-ui/react-icons"
 import Pagination from "./Pagination";
 import { ratingColor } from "../utils/ratingColor";
 
-export default function TableSubmissions({ data, toggle, isMarked }) {
+export default function TableSubmissions({ data, isSolved }) {
   const [tempq, setTempq] = useState(data);
+
+  useEffect(() => {
+    setTempq(data);
+  }, [data]);
 
   function sortAsc() {
     const sortedTempq = [...tempq].sort((a, b) => {
@@ -55,7 +59,7 @@ export default function TableSubmissions({ data, toggle, isMarked }) {
         <Table.Header>
           <Table.Row style={{ color: "#cccccc" }}>
             <Table.ColumnHeaderCell>No.</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell title="Previously solved by you">✓</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell title="Already solved by you">✓</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Problem</Table.ColumnHeaderCell>
             <Table.Cell px={"0"}>
               <DropdownMenu.Root modal={false}>
@@ -85,8 +89,7 @@ export default function TableSubmissions({ data, toggle, isMarked }) {
 
         <Table.Body style={{ color: "#888888" }}>
           {page.map((it, index) => {
-            const problemKey = `${it.contestId}-${it.index}`;
-            const done = isMarked(problemKey);
+            const done = isSolved(it.contestId, it.index);
 
             return (
               <Table.Row
@@ -100,18 +103,11 @@ export default function TableSubmissions({ data, toggle, isMarked }) {
                 <Table.Cell width={"1px"}>{pageNo * pageSize + index + 1}</Table.Cell>
 
                 <Table.Cell width={"1px"}>
-                  <input
-                    type="checkbox"
-                    checked={done}
-                    onChange={() => toggle(problemKey)}
-                    title={done ? "Unmark" : "Mark as solved"}
-                    style={{
-                      cursor: "pointer",
-                      accentColor: "#3e63dd",
-                      width: "14px",
-                      height: "14px",
-                    }}
-                  />
+                  {done && (
+                    <span style={{ color: "#3e63dd", fontSize: 13, fontWeight: 600 }}>
+                      ✓
+                    </span>
+                  )}
                 </Table.Cell>
 
                 <Table.RowHeaderCell className="text-nowrap">
@@ -123,9 +119,11 @@ export default function TableSubmissions({ data, toggle, isMarked }) {
                     {it.problem}
                   </Link>
                 </Table.RowHeaderCell>
+
                 <Table.Cell style={{ color: ratingColor(it.rating) }}>
                   {it.rating ? it.rating : ""}
                 </Table.Cell>
+
                 <Table.Cell>
                   <Link
                     style={{ color: "#888888", whiteSpace: "nowrap" }}
@@ -137,6 +135,7 @@ export default function TableSubmissions({ data, toggle, isMarked }) {
                     }
                   >{`${it.contestId} - ${it.index}`}</Link>
                 </Table.Cell>
+
                 <Table.Cell>
                   {it.tags.map((tag, ix) => (
                     <Code
