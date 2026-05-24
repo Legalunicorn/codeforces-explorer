@@ -25,6 +25,7 @@ export default function Problemset() {
       if (p.rating !== undefined) {
         if (p.rating < filters.minRating || p.rating > filters.maxRating) return false;
       }
+      // tags: [] = no filter; [...] = must match at least one
       if (filters.tags.length > 0) {
         if (!p.tags.some((t) => filters.tags.includes(t))) return false;
       }
@@ -71,7 +72,6 @@ export default function Problemset() {
 
   return (
     <div className="mt-6 sm:mx-4 lg:mx-14">
-      {/* ── Toolbar ── */}
       <div className="mb-3 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3 flex-wrap">
           <FilterModal filteredCount={filtered.length} totalCount={problems.length} />
@@ -98,7 +98,6 @@ export default function Problemset() {
         />
       </div>
 
-      {/* ── Table ── */}
       <Table.Root size="1">
         <Table.Header>
           <Table.Row style={{ color: "#cccccc" }}>
@@ -134,23 +133,17 @@ export default function Problemset() {
                 }}
               >
                 <Table.Cell width="1px">{pageNo * pageSize + index + 1}</Table.Cell>
-
                 <Table.Cell width="1px">
-                  {done && (
-                    <span style={{ color: "#22c55e", fontSize: 13, fontWeight: 700 }}>✓</span>
-                  )}
+                  {done && <span style={{ color: "#22c55e", fontSize: 13, fontWeight: 700 }}>✓</span>}
                 </Table.Cell>
-
                 <Table.RowHeaderCell className="text-nowrap">
                   <Link href={href} target="_blank" className="text-nowrap">{p.name}</Link>
                 </Table.RowHeaderCell>
-
                 <Table.Cell className="text-nowrap">
                   <Link href={href} target="_blank" style={{ color: "#888888" }}>
                     {p.contestId}{p.index}
                   </Link>
                 </Table.Cell>
-
                 <Table.Cell style={{ color: maskRating ? "transparent" : ratingColor(p.rating ?? 0) }}>
                   {maskRating ? (
                     <span style={{
@@ -159,9 +152,7 @@ export default function Problemset() {
                     }} />
                   ) : (p.rating ?? "—")}
                 </Table.Cell>
-
                 <Table.Cell>{p.solvedCount.toLocaleString()}</Table.Cell>
-
                 <Table.Cell>
                   {p.tags.map((tag, ix) => (
                     <Code key={tag + ix} color="gray" variant="ghost"

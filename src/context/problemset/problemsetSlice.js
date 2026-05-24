@@ -20,7 +20,10 @@ function saveFilters(filters) {
 export const defaultFilters = {
   minRating: 800,
   maxRating: 3500,
-  tags: [],          // empty = all tags shown
+  // [] = no tag filter active (show all problems)
+  // [...allTags] = all selected (all highlighted, show all)
+  // [...subset]  = show only problems with at least one of these tags
+  tags: [],
   solveStatus: "all", // "all" | "solved" | "unsolved"
 };
 
@@ -32,7 +35,7 @@ const initialState = {
   isLoading: false,
   errorMsg: "",
   filters: savedFilters
-    ? { ...defaultFilters, ...savedFilters } // merge so new keys get defaults
+    ? { ...defaultFilters, ...savedFilters }
     : defaultFilters,
 };
 
