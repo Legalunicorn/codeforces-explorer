@@ -17,14 +17,15 @@ function saveFilters(filters) {
   } catch {}
 }
 
+// tags semantics:
+//   null        → all selected / no tag filter (default)
+//   []          → nothing selected, nothing passes
+//   [...subset] → filter to problems with ≥1 matching tag
 export const defaultFilters = {
   minRating: 800,
   maxRating: 3500,
-  // [] = no tag filter active (show all problems)
-  // [...allTags] = all selected (all highlighted, show all)
-  // [...subset]  = show only problems with at least one of these tags
-  tags: [],
-  solveStatus: "all", // "all" | "solved" | "unsolved"
+  tags: null,
+  solveStatus: "all",
 };
 
 const savedFilters = loadFilters();

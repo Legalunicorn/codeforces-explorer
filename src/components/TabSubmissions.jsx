@@ -26,7 +26,7 @@ export default function TabSubmissions() {
         if (it.rating < filters.minRating || it.rating > filters.maxRating) return false;
       }
       // tags: [] = no filter; [...] = must match at least one
-      if (filters.tags.length > 0) {
+      if (filters.tags !== null) {
         if (!it.tags.some((t) => filters.tags.includes(t))) return false;
       }
       if (filters.solveStatus === "solved"   && !isSolved(it.contestId, it.index)) return false;

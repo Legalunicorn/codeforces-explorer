@@ -74,6 +74,11 @@ function RatingInput({ label, value, onChange, clampMin, clampMax }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Tag state semantics (draft.tags):
+//   null         → all selected, all green, no filter applied
+//   []           → nothing selected, all gray, nothing passes tag filter
+//   [...subset]  → only those tags highlighted; filter to problems with ≥1 match
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function FilterModal({ filteredCount, totalCount }) {
   const dispatch = useDispatch();
@@ -96,13 +101,8 @@ export default function FilterModal({ filteredCount, totalCount }) {
     setDraft(defaultFilters);
   }
 
-  // tags is always a plain array:
-  //   []           = no tag filter active (show all, nothing highlighted)
-  //   [...allTags] = all selected (show all, all highlighted)
-  //   [...subset]  = only problems with at least one of these tags
-
   function selectAllTags() {
-    setDraft((prev) => ({ ...prev, tags: [...allTags] }));
+    setDraft((prev) => ({ ...prev, tags: null }));
   }
 
   function deselectAllTags() {
@@ -111,25 +111,36 @@ export default function FilterModal({ filteredCount, totalCount }) {
 
   function toggleTag(tag) {
     setDraft((prev) => {
+      if (prev.tags === null) {
+        // All selected → deselect just this one tag
+        const next = allTags.filter((t) => t !== tag);
+        // If somehow everything still selected, stay at null
+        return { ...prev, tags: next.length === allTags.length ? null : next };
+      }
       const has = prev.tags.includes(tag);
-      return {
-        ...prev,
-        tags: has
-          ? prev.tags.filter((t) => t !== tag)
-          : [...prev.tags, tag],
-      };
+      if (has) {
+        return { ...prev, tags: prev.tags.filter((t) => t !== tag) };
+      } else {
+        const next = [...prev.tags, tag];
+        // If all tags are now selected, collapse to null
+        return { ...prev, tags: next.length === allTags.length ? null : next };
+      }
     });
   }
 
-  // a "real" tag filter is active only when it's a non-empty subset (not full set)
-  const hasTagFilter = filters.tags.length > 0 && filters.tags.length < allTags.length;
+  // tag for display: green if null (all) or explicitly included
+  function isTagSelected(tag) {
+    return draft.tags === null || draft.tags.includes(tag);
+  }
 
+  // active filter badge: tag filter is "active" only when it's a strict subset (not null/all)
+  const hasTagFilter = filters.tags !== null;
   const activeFilterCount =
     (filters.minRating !== RATING_MIN || filters.maxRating !== RATING_MAX ? 1 : 0) +
     (hasTagFilter ? 1 : 0) +
     (filters.solveStatus !== "all" ? 1 : 0);
 
-  const draftTagCount = draft.tags.length;
+  const draftSelectedCount = draft.tags === null ? allTags.length : draft.tags.length;
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
@@ -163,9 +174,7 @@ export default function FilterModal({ filteredCount, totalCount }) {
           {/* ── Solve status (viewer only) ── */}
           {viewerHandle && (
             <div>
-              <Text size="2" weight="medium" className="mb-2 block">
-                Solve Status
-              </Text>
+              <Text size="2" weight="medium" className="mb-2 block">Solve Status</Text>
               <div className="flex gap-2">
                 {SOLVE_OPTIONS.map(({ value, label }) => (
                   <button
@@ -190,9 +199,7 @@ export default function FilterModal({ filteredCount, totalCount }) {
 
           {/* ── Rating range ── */}
           <div>
-            <Text size="2" weight="medium" className="mb-2 block">
-              Rating Range
-            </Text>
+            <Text size="2" weight="medium" className="mb-2 block">Rating Range</Text>
             <div className="flex items-center gap-3 flex-wrap">
               <RatingInput
                 label="Min"
@@ -232,11 +239,7 @@ export default function FilterModal({ filteredCount, totalCount }) {
             <div className="mb-2 flex items-center gap-2 flex-wrap">
               <Text size="2" weight="medium">Tags</Text>
               <Text size="1" color="gray">
-                {draftTagCount === 0
-                  ? "(none — shows all)"
-                  : draftTagCount === allTags.length
-                  ? "(all selected)"
-                  : `(${draftTagCount} / ${allTags.length})`}
+                ({draftSelectedCount} / {allTags.length})
               </Text>
               <button
                 onClick={selectAllTags}
@@ -251,26 +254,20 @@ export default function FilterModal({ filteredCount, totalCount }) {
                 Unselect All
               </button>
             </div>
-            <Text size="1" color="gray" className="mb-2 block">
-              Problems must match at least one selected tag. Empty selection = no tag filter (show all).
-            </Text>
             <div className="flex flex-wrap gap-1.5">
-              {allTags.map((tag) => {
-                const selected = draft.tags.includes(tag);
-                return (
-                  <button
-                    key={tag}
-                    onClick={() => toggleTag(tag)}
-                    className={`rounded px-2.5 py-1 text-xs font-medium transition-all duration-100 ${
-                      selected
-                        ? "bg-[#1a5c35] text-white ring-1 ring-[#2d8a52]"
-                        : "bg-[#1e1e1e] text-[#555] ring-1 ring-[#333] hover:text-[#aaa]"
-                    }`}
-                  >
-                    {tag}
-                  </button>
-                );
-              })}
+              {allTags.map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  className={`rounded px-2.5 py-1 text-xs font-medium transition-all duration-100 ${
+                    isTagSelected(tag)
+                      ? "bg-[#1a5c35] text-white ring-1 ring-[#2d8a52]"
+                      : "bg-[#1e1e1e] text-[#555] ring-1 ring-[#333] hover:text-[#aaa]"
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
             </div>
           </div>
         </div>

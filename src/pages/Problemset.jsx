@@ -26,7 +26,7 @@ export default function Problemset() {
         if (p.rating < filters.minRating || p.rating > filters.maxRating) return false;
       }
       // tags: [] = no filter; [...] = must match at least one
-      if (filters.tags.length > 0) {
+      if (filters.tags !== null) {
         if (!p.tags.some((t) => filters.tags.includes(t))) return false;
       }
       if (filters.solveStatus === "solved"   && !isSolved(p.contestId, p.index)) return false;
