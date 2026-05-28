@@ -37,7 +37,7 @@ const router = createBrowserRouter(
     },
   ],
   {
-    basename: "/codeforces-explorer",
+    basename: "/",
   },
 );
 
