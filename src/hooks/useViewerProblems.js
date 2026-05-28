@@ -1,15 +1,30 @@
 // src/hooks/useViewerProblems.js
 //
-// Uses a module-level event emitter so every component that calls this hook
-// shares the same solvedSet and viewerHandle — no Redux needed.
+// Supports multiple comma-separated handles.
+// Every component sharing this hook sees the same solvedSet.
 
 import { useState, useEffect, useCallback } from "react";
 import { USER_STATUS } from "../utils/api";
 
 const STORAGE_KEY = "cfe-viewer-handle";
 
-// ── Module-level shared state ────────────────────────────────────────────────
-let _viewerHandle = localStorage.getItem(STORAGE_KEY) || "";
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Parse a raw input string into a clean array of handles. */
+function parseHandles(raw) {
+  return raw
+    .split(",")
+    .map((h) => h.trim())
+    .filter(Boolean);
+}
+
+/** Join handles back to a display string. */
+function joinHandles(handles) {
+  return handles.join(", ");
+}
+
+// ── Module-level shared state ─────────────────────────────────────────────────
+let _rawInput     = localStorage.getItem(STORAGE_KEY) || "";   // raw string, e.g. "Hiroc, Tanny"
 let _solvedSet    = new Set();
 let _isLoading    = false;
 let _error        = "";
@@ -19,11 +34,13 @@ function _notify() {
   _listeners.forEach((fn) => fn());
 }
 
-async function _fetchSolved(handle) {
-  if (!handle) {
-    _solvedSet  = new Set();
-    _isLoading  = false;
-    _error      = "";
+async function _fetchSolved(rawInput) {
+  const handles = parseHandles(rawInput);
+
+  if (handles.length === 0) {
+    _solvedSet = new Set();
+    _isLoading = false;
+    _error     = "";
     _notify();
     return;
   }
@@ -33,18 +50,26 @@ async function _fetchSolved(handle) {
   _notify();
 
   try {
-    const res = await fetch(USER_STATUS(handle));
-    if (res.status === 400) throw new Error("User not found");
-    if (res.status === 403) throw new Error("Too many requests");
-    if (!res.ok)            throw new Error("Failed to fetch data");
+    // Fetch all handles in parallel
+    const results = await Promise.all(
+      handles.map(async (handle) => {
+        const res = await fetch(USER_STATUS(handle));
+        if (res.status === 400) throw new Error(`User "${handle}" not found`);
+        if (res.status === 403) throw new Error("Too many requests");
+        if (!res.ok)            throw new Error(`Failed to fetch data for "${handle}"`);
+        return res.json();
+      })
+    );
 
-    const data   = await res.json();
     const solved = new Set();
-    data.result.forEach((it) => {
-      if (it.verdict === "OK") {
-        solved.add(`${it.contestId}-${it.problem.index}`);
-      }
+    results.forEach((data) => {
+      data.result.forEach((it) => {
+        if (it.verdict === "OK") {
+          solved.add(`${it.contestId}-${it.problem.index}`);
+        }
+      });
     });
+
     _solvedSet = solved;
   } catch (e) {
     _error = e instanceof TypeError && e.message === "Failed to fetch"
@@ -57,10 +82,10 @@ async function _fetchSolved(handle) {
   }
 }
 
-// Kick off a fetch on module load if a handle was previously stored
-if (_viewerHandle) _fetchSolved(_viewerHandle);
+// Kick off a fetch on module load if handles were previously stored
+if (_rawInput) _fetchSolved(_rawInput);
 
-// ── Hook ─────────────────────────────────────────────────────────────────────
+// ── Hook ──────────────────────────────────────────────────────────────────────
 export function useViewerProblems() {
   const [, rerender] = useState(0);
 
@@ -70,9 +95,9 @@ export function useViewerProblems() {
     return () => _listeners.delete(fn);
   }, []);
 
-  const saveHandle = useCallback((handle) => {
-    const trimmed = handle.trim();
-    _viewerHandle = trimmed;
+  const saveHandle = useCallback((raw) => {
+    const trimmed = raw.trim();
+    _rawInput = trimmed;
 
     if (trimmed) {
       localStorage.setItem(STORAGE_KEY, trimmed);
@@ -90,7 +115,12 @@ export function useViewerProblems() {
   );
 
   return {
-    viewerHandle: _viewerHandle,
+    /** The raw comma-separated string, e.g. "Hiroc, Tanny" */
+    viewerHandle: _rawInput,
+    /** Whether any handle is active (used for UI styling) */
+    hasHandles: parseHandles(_rawInput).length > 0,
+    /** Number of active handles */
+    handleCount: parseHandles(_rawInput).length,
     saveHandle,
     isSolved,
     isLoading: _isLoading,

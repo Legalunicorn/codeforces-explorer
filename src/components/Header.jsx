@@ -15,7 +15,8 @@ import { useRef, useState } from "react";
 import { useViewerProblems } from "../hooks/useViewerProblems";
 
 export default function Header({ theme, toggleTheme }) {
-  const { viewerHandle, saveHandle, isLoading, error } = useViewerProblems();
+  const { viewerHandle, hasHandles, handleCount, saveHandle, isLoading, error } =
+    useViewerProblems();
   const [input, setInput] = useState(viewerHandle);
   const inputRef = useRef(null);
 
@@ -73,21 +74,23 @@ export default function Header({ theme, toggleTheme }) {
           {/* Tooltip */}
           <div
             className="
-              pointer-events-none absolute -bottom-9 right-0 z-50
+              pointer-events-none absolute -bottom-10 right-0 z-50
               whitespace-nowrap rounded bg-[#1c1c1c] px-2.5 py-1.5
               text-xs text-[#ccc] shadow-lg ring-1 ring-[#333]
               opacity-0 transition-opacity duration-150
               group-focus-within:opacity-0 group-hover:opacity-100
             "
           >
-            Add your handle to mark problems you've already solved
+            Enter one or more handles separated by commas
+            <br />
+            <span className="text-[#888]">e.g. tourist, Benq, Um_nik</span>
           </div>
 
           <div
             className={`
               flex items-center gap-1 rounded border px-2 py-1 transition-all duration-150
               ${
-                viewerHandle
+                hasHandles
                   ? "border-indigo-500 bg-indigo-950/40"
                   : "border-[#43484e] bg-transparent hover:border-[#666]"
               }
@@ -97,12 +100,12 @@ export default function Header({ theme, toggleTheme }) {
             <PersonIcon
               width={13}
               height={13}
-              className={viewerHandle ? "text-indigo-400" : "text-[#666]"}
+              className={hasHandles ? "text-indigo-400" : "text-[#666]"}
             />
             <input
               ref={inputRef}
-              className="w-24 bg-transparent text-[.78rem] text-white outline-none placeholder:text-[#555]"
-              placeholder="Your handle"
+              className="w-36 bg-transparent text-[.78rem] text-white outline-none placeholder:text-[#555]"
+              placeholder="handle1, handle2, …"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
@@ -110,21 +113,35 @@ export default function Header({ theme, toggleTheme }) {
                 if (e.key === "Escape") inputRef.current?.blur();
               }}
               onBlur={() => {
-                // Save on blur if changed
                 if (input.trim() !== viewerHandle) handleSave();
               }}
             />
+
             {/* Loading indicator */}
             {isLoading && (
               <span className="text-[10px] text-[#666]">…</span>
             )}
-            {/* Clear button — only when a handle is active */}
-            {viewerHandle && !isLoading && (
+
+            {/* Handle count badge — shown when 2+ handles are active */}
+            {hasHandles && !isLoading && handleCount > 1 && (
+              <span
+                className="
+                  ml-0.5 flex h-4 min-w-4 items-center justify-center
+                  rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white
+                "
+                title={`${handleCount} handles active`}
+              >
+                {handleCount}
+              </span>
+            )}
+
+            {/* Clear button — only when handles are active */}
+            {hasHandles && !isLoading && (
               <button
                 onClick={handleClear}
                 className="ml-0.5 rounded p-0.5 text-[#555] transition hover:text-rose-400"
                 tabIndex={-1}
-                title="Clear handle"
+                title="Clear all handles"
               >
                 <Cross2Icon width={10} height={10} />
               </button>
