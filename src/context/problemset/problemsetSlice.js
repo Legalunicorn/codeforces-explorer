@@ -28,10 +28,11 @@ export const defaultFilters = {
 const savedFilters = loadFilters();
 
 const initialState = {
-  problems:  [],
-  allTags:   [],
-  isLoading: false,
-  errorMsg:  "",
+  problems:      [],
+  allTags:       [],
+  contestNames:  {}, // contestId -> contestName
+  isLoading:     false,
+  errorMsg:      "",
   filters: savedFilters
     ? { ...defaultFilters, ...savedFilters }
     : defaultFilters,
@@ -46,9 +47,10 @@ const problemsetSlice = createSlice({
       state.errorMsg  = "";
     },
     setProblems(state, action) {
-      state.problems  = action.payload.problems;
-      state.allTags   = action.payload.allTags;
-      state.isLoading = false;
+      state.problems      = action.payload.problems;
+      state.allTags       = action.payload.allTags;
+      state.contestNames  = action.payload.contestNames ?? {};
+      state.isLoading     = false;
     },
     setError(state, action) {
       state.errorMsg  = action.payload;
@@ -80,12 +82,29 @@ export function fetchProblems() {
     dispatch({ type: "problemset/fetchingProblems" });
 
     try {
-      const res = await fetch("https://codeforces.com/api/problemset.problems");
-      if (!res.ok) throw new Error("Failed to fetch problemset");
-      const data = await res.json();
-      if (data.status !== "OK") throw new Error(data.comment || "API error");
+      // Fetch problems and contest list in parallel
+      const [problemsRes, contestsRes] = await Promise.all([
+        fetch("https://codeforces.com/api/problemset.problems"),
+        fetch("https://codeforces.com/api/contest.list?gym=false"),
+      ]);
 
-      const { problems, problemStatistics } = data.result;
+      if (!problemsRes.ok) throw new Error("Failed to fetch problemset");
+      const problemsData = await problemsRes.json();
+      if (problemsData.status !== "OK") throw new Error(problemsData.comment || "API error");
+
+      // Build a contestId -> name map from contest.list
+      // It's okay if this fails — we fall back to "Contest {id}"
+      const contestNames = {};
+      if (contestsRes.ok) {
+        const contestsData = await contestsRes.json();
+        if (contestsData.status === "OK") {
+          contestsData.result.forEach((c) => {
+            contestNames[c.id] = c.name;
+          });
+        }
+      }
+
+      const { problems, problemStatistics } = problemsData.result;
 
       const statsMap = {};
       problemStatistics.forEach((s) => {
@@ -100,6 +119,8 @@ export function fetchProblems() {
         .map((p) => ({
           ...p,
           solvedCount: statsMap[`${p.contestId}-${p.index}`] ?? 0,
+          // Annotate each problem with the resolved contest name
+          contestName: contestNames[p.contestId] ?? `Contest ${p.contestId}`,
         }))
         .sort((a, b) => {
           if (b.contestId !== a.contestId) return b.contestId - a.contestId;
@@ -108,7 +129,7 @@ export function fetchProblems() {
 
       dispatch({
         type: "problemset/setProblems",
-        payload: { problems: merged, allTags },
+        payload: { problems: merged, allTags, contestNames },
       });
     } catch (error) {
       dispatch({

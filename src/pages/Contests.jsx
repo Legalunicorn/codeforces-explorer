@@ -25,21 +25,21 @@ const DIV_TABS = [
       !/global/i.test(n) },
 ];
 
-// Fixed column set — A through H covers all standard CF contests
-const COL_LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
-const CONTEST_COL_W = 220; // px
-const PROB_COL_W    = 150; // px
+const NO_COL_W      = 44;
+const CONTEST_COL_W = 260;
+const PROB_COL_W    = 190;
+const COL_LETTERS   = ["A", "B", "C", "D", "E", "F", "G", "H"];
 
 // ── Single problem cell ──────────────────────────────────────────────────────
-function ProbCell({ problem, done, maskRating, maskTags }) {
+function ProbCell({ problem, done, maskRating }) {
   const cellStyle = {
     width:           PROB_COL_W,
     minWidth:        PROB_COL_W,
     maxWidth:        PROB_COL_W,
     borderRight:     "1px solid #1e2025",
     borderBottom:    "1px solid #1e2025",
-    verticalAlign:   "top",
-    padding:         "6px 8px",
+    verticalAlign:   "middle",
+    padding:         "9px 11px",
     backgroundColor: done ? "rgba(34,197,94,0.12)" : "transparent",
   };
 
@@ -50,129 +50,150 @@ function ProbCell({ problem, done, maskRating, maskTags }) {
       ? `https://codeforces.com/problemset/gymProblem/${problem.contestId}/${problem.index}`
       : `https://codeforces.com/problemset/problem/${problem.contestId}/${problem.index}`;
 
+  // Title color: if done → green, else if rating shown → rating color, else default
+  const titleColor = done
+    ? "#4ade80"
+    : !maskRating && problem.rating
+      ? ratingColor(problem.rating)
+      : "#c9d1d9";
+
   return (
     <td style={cellStyle}>
       <a href={href} target="_blank" rel="noreferrer" className="group flex flex-col gap-0.5">
         <span
-          className="text-[.72rem] font-medium leading-snug group-hover:underline"
-          style={{ color: done ? "#4ade80" : "#c9d1d9" }}
+          className="text-[.82rem] font-medium leading-snug group-hover:underline"
+          style={{ color: titleColor }}
         >
           {problem.index}. {problem.name}
         </span>
 
-        {/* Rating */}
-        {maskRating ? (
-          problem.rating ? (
-            <span style={{
-              display: "inline-block", width: "2rem", height: "0.55em",
-              backgroundColor: "#2a2a2a", borderRadius: 3, marginTop: 2,
-            }} />
-          ) : null
-        ) : problem.rating ? (
-          <span className="text-[.63rem] font-semibold" style={{ color: ratingColor(problem.rating) }}>
-            {problem.rating}
-          </span>
-        ) : (
-          <span className="text-[.63rem] text-[#333]">N/A</span>
-        )}
-
-        {/* Tags */}
-        {!maskTags && problem.tags?.length > 0 && (
-          <span className="mt-0.5 flex flex-wrap gap-0.5">
-            {problem.tags.map((t) => (
-              <span key={t} className="rounded-sm border border-[#2e3135] px-1 py-px text-[.57rem] text-[#666]">
-                {t}
-              </span>
-            ))}
-          </span>
-        )}
+        {/* Rating row — always in DOM at fixed height; content swaps, dash stays invisible when masked */}
+        <span style={{ display: "block", height: "1.1em", lineHeight: "1.1em" }}>
+          {maskRating ? (
+            // masked: show pill for rated, invisible dash for unrated (holds height)
+            problem.rating ? (
+              <span style={{
+                display: "inline-block", width: "2.2rem", height: "0.6em",
+                backgroundColor: "#2a2a2a", borderRadius: 3, verticalAlign: "middle",
+              }} />
+            ) : (
+              <span style={{ visibility: "hidden" }} className="text-[.7rem]">—</span>
+            )
+          ) : problem.rating ? (
+            <span className="text-[.7rem] font-semibold" style={{ color: ratingColor(problem.rating) }}>
+              {problem.rating}
+            </span>
+          ) : (
+            // unrated + visible: show dim dash
+            <span className="text-[.7rem]" style={{ color: "#2a2a2a" }}>—</span>
+          )}
+        </span>
       </a>
     </td>
   );
 }
 
 // ── One <tr> per contest ─────────────────────────────────────────────────────
-function ContestRow({ contest, isSolved, maskRating, maskTags }) {
+function ContestRow({ contest, isSolved, maskRating, rowNo }) {
   const solvedCount = COL_LETTERS.reduce((acc, col) => {
     const p = contest.problems.get(col);
     return acc + (p && isSolved(p.contestId, p.index) ? 1 : 0);
   }, 0);
 
-  const nameCellStyle = {
-    width:        CONTEST_COL_W,
-    minWidth:     CONTEST_COL_W,
-    maxWidth:     CONTEST_COL_W,
-    borderRight:  "1px solid #1e2025",
-    borderBottom: "1px solid #1e2025",
+  const noCellStyle = {
+    width:           NO_COL_W,
+    minWidth:        NO_COL_W,
+    maxWidth:        NO_COL_W,
+    borderRight:     "1px solid #1e2025",
+    borderBottom:    "1px solid #1e2025",
     backgroundColor: "#0a0b0c",
-    padding:      "6px 10px",
-    verticalAlign: "middle",
+    padding:         "9px 6px",
+    verticalAlign:   "middle",
+    textAlign:       "center",
+    fontSize:        ".7rem",
+    color:           "#444",
+    position:        "sticky",
+    left:            0,
+    zIndex:          1,
+  };
+
+  const nameCellStyle = {
+    width:           CONTEST_COL_W,
+    minWidth:        CONTEST_COL_W,
+    maxWidth:        CONTEST_COL_W,
+    borderRight:     "1px solid #1e2025",
+    borderBottom:    "1px solid #1e2025",
+    backgroundColor: "#0a0b0c",
+    padding:         "9px 12px",
+    verticalAlign:   "middle",
+    position:        "sticky",
+    left:            NO_COL_W,
+    zIndex:          1,
   };
 
   return (
     <tr>
+      <td style={noCellStyle}>{rowNo}</td>
       <td style={nameCellStyle}>
         <a
           href={`https://codeforces.com/contest/${contest.id}`}
           target="_blank"
           rel="noreferrer"
-          className="block text-[.68rem] font-semibold leading-snug text-[#999] hover:text-white hover:underline"
+          className="group block"
         >
-          {contest.name}
+          <span className="block text-[.8rem] font-semibold leading-snug text-[#bbb] transition group-hover:text-white group-hover:underline">
+            {contest.name}
+          </span>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="text-[.65rem] text-[#444]">#{contest.id}</span>
+            {solvedCount > 0 && (
+              <span className="text-[.65rem] font-semibold text-[#4ade80]">
+                {solvedCount}/{contest.problems.size} solved
+              </span>
+            )}
+          </div>
         </a>
-        <div className="mt-0.5 flex items-center gap-1.5">
-          <span className="text-[.6rem] text-[#444]">#{contest.id}</span>
-          {solvedCount > 0 && (
-            <span className="text-[.6rem] text-[#4ade80]">
-              {solvedCount}/{contest.problems.size}
-            </span>
-          )}
-        </div>
       </td>
 
       {COL_LETTERS.map((col) => {
         const p    = contest.problems.get(col) ?? null;
         const done = p ? isSolved(p.contestId, p.index) : false;
-        return (
-          <ProbCell key={col} problem={p} done={done} maskRating={maskRating} maskTags={maskTags} />
-        );
+        return <ProbCell key={col} problem={p} done={done} maskRating={maskRating} />;
       })}
     </tr>
   );
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
-const PAGE_SIZE = 60;
+const PAGE_SIZE = 50;
 
 export default function Contests() {
   const dispatch = useDispatch();
-  const { problems, isLoading, errorMsg } = useSelector((store) => store.problemset);
+  const { problems, contestNames, isLoading, errorMsg } = useSelector((store) => store.problemset);
   const { isSolved } = useViewerProblems();
 
   const [maskRating, setMaskRating] = useState(false);
-  const [maskTags,   setMaskTags]   = useState(true);
   const [activeTab,  setActiveTab]  = useState(0);
   const [search,     setSearch]     = useState("");
   const [page,       setPage]       = useState(0);
 
   useEffect(() => { dispatch(fetchProblems()); }, [dispatch]);
 
-  // Group problems by contest — skip gym contests (id >= 100000)
   const contestMap = useMemo(() => {
     const map = new Map();
     problems.forEach((p) => {
-      if (p.contestId >= 100000) return; // skip gyms — they have no proper contestName
+      if (p.contestId >= 100000) return;
       if (!map.has(p.contestId)) {
-        map.set(p.contestId, {
-          name: p.contestName ?? `Contest ${p.contestId}`,
-          id:   p.contestId,
-          problems: new Map(),
-        });
+        const name =
+          contestNames?.[p.contestId] ||
+          p.contestName ||
+          `Contest ${p.contestId}`;
+        map.set(p.contestId, { name, id: p.contestId, problems: new Map() });
       }
       map.get(p.contestId).problems.set(p.index, p);
     });
     return map;
-  }, [problems]);
+  }, [problems, contestNames]);
 
   const allContests = useMemo(
     () => Array.from(contestMap.values()).sort((a, b) => b.id - a.id),
@@ -201,14 +222,24 @@ export default function Contests() {
   if (errorMsg)  return <ErrorPage text={errorMsg} />;
 
   const thStyle = {
-    borderRight:  "1px solid #1e2025",
-    borderBottom: "1px solid #1e2025",
-    padding:      "5px 8px",
-    textAlign:    "left",
-    fontSize:     ".68rem",
-    fontWeight:   700,
-    color:        "#444",
+    borderRight:     "1px solid #1e2025",
+    borderBottom:    "1px solid #1e2025",
+    padding:         "6px 11px",
+    textAlign:       "left",
+    fontSize:        ".75rem",
+    fontWeight:      700,
+    color:           "#555",
     backgroundColor: "#0d0e10",
+    whiteSpace:      "nowrap",
+  };
+
+  const stickyThStyle = {
+    ...thStyle,
+    position: "sticky",
+    left:     0,
+    zIndex:   2,
+    width:    CONTEST_COL_W,
+    minWidth: CONTEST_COL_W,
   };
 
   return (
@@ -221,18 +252,13 @@ export default function Contests() {
             {maskRating ? <EyeNoneIcon width={13} height={13} /> : <EyeOpenIcon width={13} height={13} />}
             {maskRating ? "Ratings hidden" : "Hide ratings"}
           </Button>
-          <Button size="1" variant={maskTags ? "solid" : "soft"} color={maskTags ? "indigo" : "gray"}
-            onClick={() => setMaskTags((v) => !v)}>
-            {maskTags ? <EyeNoneIcon width={13} height={13} /> : <EyeOpenIcon width={13} height={13} />}
-            {maskTags ? "Tags hidden" : "Hide tags"}
-          </Button>
           <span className="text-xs text-[#555]">{filtered.length} contests</span>
         </div>
 
         <div className="flex items-center gap-1 rounded border border-[#2e3135] bg-[#111] px-2 py-1">
           <MagnifyingGlassIcon width={13} height={13} className="text-[#555]" />
           <input
-            className="w-44 bg-transparent text-xs text-white outline-none placeholder:text-[#444]"
+            className="w-48 bg-transparent text-xs text-white outline-none placeholder:text-[#444]"
             placeholder="Search contest name or ID…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -254,42 +280,9 @@ export default function Contests() {
         ))}
       </div>
 
-      {/* Single shared table — colgroup locks widths */}
-      <div className="overflow-x-auto rounded border border-[#1e2025]">
-        <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
-          <colgroup>
-            <col style={{ width: CONTEST_COL_W }} />
-            {COL_LETTERS.map((col) => (
-              <col key={col} style={{ width: PROB_COL_W }} />
-            ))}
-          </colgroup>
-
-          <thead>
-            <tr>
-              <th style={{ ...thStyle, width: CONTEST_COL_W }}>Contest</th>
-              {COL_LETTERS.map((col) => (
-                <th key={col} style={{ ...thStyle, width: PROB_COL_W }}>{col}</th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
-            {pageContests.map((contest) => (
-              <ContestRow
-                key={contest.id}
-                contest={contest}
-                isSolved={isSolved}
-                maskRating={maskRating}
-                maskTags={maskTags}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
+      {/* Pagination — on top */}
       {totalPages > 1 && (
-        <div className="mt-6 flex items-center justify-center gap-2">
+        <div className="mb-3 flex items-center gap-2">
           <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
             className="rounded border border-[#2e3135] px-3 py-1 text-xs text-[#888] transition hover:border-[#555] hover:text-white disabled:opacity-30">
             ← Prev
@@ -301,6 +294,52 @@ export default function Contests() {
           </button>
         </div>
       )}
+
+      {/* Scrollable table */}
+      <div className="overflow-x-auto rounded border border-[#1e2025]">
+        <table style={{
+          borderCollapse: "collapse",
+          tableLayout:    "fixed",
+          minWidth:       NO_COL_W + CONTEST_COL_W + COL_LETTERS.length * PROB_COL_W,
+        }}>
+          <colgroup>
+            <col style={{ width: NO_COL_W }} />
+            <col style={{ width: CONTEST_COL_W }} />
+            {COL_LETTERS.map((col) => (
+              <col key={col} style={{ width: PROB_COL_W }} />
+            ))}
+          </colgroup>
+          <thead>
+            <tr>
+              <th style={{ ...stickyThStyle, width: NO_COL_W, minWidth: NO_COL_W, left: 0, textAlign: "center" }}>No.</th>
+              <th style={{ ...stickyThStyle, width: CONTEST_COL_W, minWidth: CONTEST_COL_W, left: NO_COL_W }}>Contest</th>
+              {COL_LETTERS.map((col) => (
+                <th key={col} style={thStyle}>{col}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {pageContests.length === 0 ? (
+              <tr>
+                <td colSpan={COL_LETTERS.length + 2}
+                  style={{ padding: "32px", textAlign: "center", color: "#444", fontSize: ".85rem" }}>
+                  No contests found
+                </td>
+              </tr>
+            ) : (
+              pageContests.map((contest, index) => (
+                <ContestRow
+                  key={contest.id}
+                  contest={contest}
+                  isSolved={isSolved}
+                  maskRating={maskRating}
+                  rowNo={page * PAGE_SIZE + index + 1}
+                />
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
