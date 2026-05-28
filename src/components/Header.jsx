@@ -1,7 +1,7 @@
 // src/components/Header.jsx
 import SearchBar from "./SearchBar";
 import header from "../assets/header2.png";
-import { Link } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import {
   DividerVerticalIcon,
   GitHubLogoIcon,
@@ -32,7 +32,7 @@ export default function Header({ theme, toggleTheme }) {
 
   return (
     <div className="z-10 flex items-center justify-between border-[#5a5e6750] px-4 py-3">
-      {/* ── Left: logo + github ── */}
+      {/* ── Left: logo + github + nav ── */}
       <div className="flex items-center justify-center gap-x-2">
         <Link
           className="flex w-fit cursor-pointer select-none gap-x-2 rounded-sm p-1 font-spaceMono text-sm transition-all duration-200 hover:bg-[#70707030]"
@@ -41,7 +41,40 @@ export default function Header({ theme, toggleTheme }) {
           <img className="w-5" src={header} alt="" />
           <span>explorer.</span>
         </Link>
+
         <DividerVerticalIcon width={20} height={20} color="#ffffff40" />
+
+        {/* Nav links */}
+        <nav className="flex items-center gap-x-1">
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) =>
+              `rounded px-2 py-1 text-xs font-medium transition-all duration-150 ${
+                isActive
+                  ? "bg-[#1e3a5c] text-white"
+                  : "text-[#666] hover:bg-[#70707020] hover:text-[#aaa]"
+              }`
+            }
+          >
+            Problems
+          </NavLink>
+          <NavLink
+            to="/contests"
+            className={({ isActive }) =>
+              `rounded px-2 py-1 text-xs font-medium transition-all duration-150 ${
+                isActive
+                  ? "bg-[#1e3a5c] text-white"
+                  : "text-[#666] hover:bg-[#70707020] hover:text-[#aaa]"
+              }`
+            }
+          >
+            Contests
+          </NavLink>
+        </nav>
+
+        <DividerVerticalIcon width={20} height={20} color="#ffffff40" />
+
         <Button color="gray" variant="ghost" size={"1"}>
           <a
             href="https://github.com/legalunicorn/codeforces-explorer"
@@ -122,20 +155,17 @@ export default function Header({ theme, toggleTheme }) {
               <span className="text-[10px] text-[#666]">…</span>
             )}
 
-            {/* Handle count badge — shown when 2+ handles are active */}
+            {/* Handle count badge */}
             {hasHandles && !isLoading && handleCount > 1 && (
               <span
-                className="
-                  ml-0.5 flex h-4 min-w-4 items-center justify-center
-                  rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white
-                "
+                className="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white"
                 title={`${handleCount} handles active`}
               >
                 {handleCount}
               </span>
             )}
 
-            {/* Clear button — only when handles are active */}
+            {/* Clear button */}
             {hasHandles && !isLoading && (
               <button
                 onClick={handleClear}

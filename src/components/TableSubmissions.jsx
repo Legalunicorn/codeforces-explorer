@@ -5,7 +5,30 @@ import { ArrowDownIcon, ArrowUpIcon, BarChartIcon } from "@radix-ui/react-icons"
 import Pagination from "./Pagination";
 import { ratingColor } from "../utils/ratingColor";
 
-export default function TableSubmissions({ data, isSolved, maskRating = false }) {
+// A fixed-width censored pill — same visual footprint regardless of tag text length
+function CensoredTag() {
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        width: "4rem",
+        height: "1.1em",
+        backgroundColor: "#2a2a2a",
+        borderRadius: "3px",
+        border: "0.3px solid #363a3f",
+        margin: "0 2px",
+        verticalAlign: "middle",
+      }}
+    />
+  );
+}
+
+export default function TableSubmissions({
+  data,
+  isSolved,
+  maskRating = false,
+  maskTags = true,
+}) {
   const [tempq, setTempq] = useState(data);
 
   useEffect(() => {
@@ -14,12 +37,14 @@ export default function TableSubmissions({ data, isSolved, maskRating = false })
   }, [data]);
 
   function sortAsc() {
-    setTempq([...tempq].sort((a, b) => {
-      if (!a.rating && !b.rating) return 0;
-      if (!a.rating) return 1;
-      if (!b.rating) return -1;
-      return a.rating - b.rating;
-    }));
+    setTempq(
+      [...tempq].sort((a, b) => {
+        if (!a.rating && !b.rating) return 0;
+        if (!a.rating) return 1;
+        if (!b.rating) return -1;
+        return a.rating - b.rating;
+      }),
+    );
   }
 
   function sortDesc() {
@@ -67,14 +92,36 @@ export default function TableSubmissions({ data, isSolved, maskRating = false })
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content size={"1"}>
-                  <DropdownMenu.Item shortcut={<BarChartIcon />} onClick={sortDefault}>Default</DropdownMenu.Item>
-                  <DropdownMenu.Item shortcut={<ArrowDownIcon />} onClick={sortAsc}>Ascending</DropdownMenu.Item>
-                  <DropdownMenu.Item shortcut={<ArrowUpIcon />} onClick={sortDesc}>Descending</DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    shortcut={<BarChartIcon />}
+                    onClick={sortDefault}
+                  >
+                    Default
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    shortcut={<ArrowDownIcon />}
+                    onClick={sortAsc}
+                  >
+                    Ascending
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    shortcut={<ArrowUpIcon />}
+                    onClick={sortDesc}
+                  >
+                    Descending
+                  </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Root>
             </Table.Cell>
             <Table.ColumnHeaderCell>Division</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Tags</Table.ColumnHeaderCell>
+            {/* Tags column always present — header label changes when masked */}
+            <Table.ColumnHeaderCell>
+              {maskTags ? (
+                <span className="text-[#555]">Tags</span>
+              ) : (
+                "Tags"
+              )}
+            </Table.ColumnHeaderCell>
           </Table.Row>
         </Table.Header>
 
@@ -88,15 +135,26 @@ export default function TableSubmissions({ data, isSolved, maskRating = false })
                 style={{
                   color: "#888888",
                   opacity: done ? 0.55 : 1,
-                  backgroundColor: done ? "rgba(34, 197, 94, 0.07)" : "transparent",
-                  transition: "opacity 0.15s ease, background-color 0.15s ease",
+                  backgroundColor: done
+                    ? "rgba(34, 197, 94, 0.07)"
+                    : "transparent",
+                  transition:
+                    "opacity 0.15s ease, background-color 0.15s ease",
                 }}
               >
-                <Table.Cell width={"1px"}>{pageNo * pageSize + index + 1}</Table.Cell>
+                <Table.Cell width={"1px"}>
+                  {pageNo * pageSize + index + 1}
+                </Table.Cell>
 
                 <Table.Cell width={"1px"}>
                   {done && (
-                    <span style={{ color: "#22c55e", fontSize: 13, fontWeight: 700 }}>
+                    <span
+                      style={{
+                        color: "#22c55e",
+                        fontSize: 13,
+                        fontWeight: 700,
+                      }}
+                    >
                       ✓
                     </span>
                   )}
@@ -112,18 +170,28 @@ export default function TableSubmissions({ data, isSolved, maskRating = false })
                   </Link>
                 </Table.RowHeaderCell>
 
-                <Table.Cell style={{ color: maskRating ? "transparent" : ratingColor(it.rating) }}>
+                <Table.Cell
+                  style={{
+                    color: maskRating
+                      ? "transparent"
+                      : ratingColor(it.rating),
+                  }}
+                >
                   {maskRating ? (
-                    <span style={{
-                      display: "inline-block",
-                      width: "2.5rem",
-                      height: "0.85em",
-                      backgroundColor: "#333",
-                      borderRadius: "3px",
-                      verticalAlign: "middle",
-                    }} />
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: "2.5rem",
+                        height: "0.85em",
+                        backgroundColor: "#333",
+                        borderRadius: "3px",
+                        verticalAlign: "middle",
+                      }}
+                    />
+                  ) : it.rating ? (
+                    it.rating
                   ) : (
-                    it.rating ? it.rating : ""
+                    ""
                   )}
                 </Table.Cell>
 
@@ -139,18 +207,24 @@ export default function TableSubmissions({ data, isSolved, maskRating = false })
                   >{`${it.contestId} - ${it.index}`}</Link>
                 </Table.Cell>
 
+                {/* Tags column always rendered */}
                 <Table.Cell>
-                  {it.tags.map((tag, ix) => (
-                    <Code
-                      key={tag + it.id + ix}
-                      color="gray"
-                      variant="ghost"
-                      className="mx-1 text-nowrap border-[0.3px] border-[#363a3f]"
-                      style={{ padding: "1px 4px" }}
-                    >
-                      {tag}
-                    </Code>
-                  ))}
+                  {maskTags
+                    ? // Show a censored pill per tag to preserve row height/width
+                      it.tags.map((tag, ix) => (
+                        <CensoredTag key={tag + it.id + ix} />
+                      ))
+                    : it.tags.map((tag, ix) => (
+                        <Code
+                          key={tag + it.id + ix}
+                          color="gray"
+                          variant="ghost"
+                          className="mx-1 text-nowrap border-[0.3px] border-[#363a3f]"
+                          style={{ padding: "1px 4px" }}
+                        >
+                          {tag}
+                        </Code>
+                      ))}
                 </Table.Cell>
               </Table.Row>
             );

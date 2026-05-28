@@ -5,6 +5,7 @@ import Problemset from "./pages/Problemset";
 import User from "./pages/User";
 import ErrorPage from "./pages/ErrorPage";
 import Solutions from "./pages/Solutions";
+import Contests from "./pages/Contests";
 
 const router = createBrowserRouter(
   [
@@ -15,6 +16,11 @@ const router = createBrowserRouter(
         {
           path: "/",
           element: <Problemset />,
+          errorElement: <ErrorPage />,
+        },
+        {
+          path: "/contests",
+          element: <Contests />,
           errorElement: <ErrorPage />,
         },
         {

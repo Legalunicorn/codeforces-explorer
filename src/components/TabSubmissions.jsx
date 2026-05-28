@@ -25,7 +25,6 @@ export default function TabSubmissions() {
       if (it.rating) {
         if (it.rating < filters.minRating || it.rating > filters.maxRating) return false;
       }
-      // tags: [] = no filter; [...] = must match at least one
       if (filters.tags !== null) {
         if (!it.tags.some((t) => filters.tags.includes(t))) return false;
       }
@@ -63,7 +62,9 @@ export default function TabSubmissions() {
         </Tabs.List>
 
         <Box pt="3">
-          <Tabs.Content value="profile"><Profile /></Tabs.Content>
+          <Tabs.Content value="profile">
+            <Profile />
+          </Tabs.Content>
           <Tabs.Content value="psolved">
             <TableSubmissions data={filteredSolved}   isSolved={isSolved} maskRating={maskRating} />
           </Tabs.Content>
