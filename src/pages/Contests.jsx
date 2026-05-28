@@ -30,15 +30,35 @@ const CONTEST_COL_W = 260;
 const PROB_COL_W    = 190;
 const COL_LETTERS   = ["A", "B", "C", "D", "E", "F", "G", "H"];
 
+/**
+ * Collect numbered sub-problems for a base letter.
+ * e.g. col="C" → looks up C1, C2, C3... until a gap.
+ */
+function getSubProblems(problems, col) {
+  const subs = [];
+  for (let n = 1; n <= 4; n++) {
+    const p = problems.get(col + n);
+    if (!p) break;
+    subs.push(p);
+  }
+  return subs;
+}
+
+// ── Shared cell border/size style ────────────────────────────────────────────
+const probCellBase = {
+  width:        PROB_COL_W,
+  minWidth:     PROB_COL_W,
+  maxWidth:     PROB_COL_W,
+  borderRight:  "1px solid #1e2025",
+  borderBottom: "1px solid #1e2025",
+  verticalAlign: "middle",
+  overflow:     "hidden",
+};
+
 // ── Single problem cell ──────────────────────────────────────────────────────
 function ProbCell({ problem, done, maskRating }) {
   const cellStyle = {
-    width:           PROB_COL_W,
-    minWidth:        PROB_COL_W,
-    maxWidth:        PROB_COL_W,
-    borderRight:     "1px solid #1e2025",
-    borderBottom:    "1px solid #1e2025",
-    verticalAlign:   "middle",
+    ...probCellBase,
     padding:         "9px 11px",
     backgroundColor: done ? "rgba(34,197,94,0.12)" : "transparent",
   };
@@ -50,7 +70,6 @@ function ProbCell({ problem, done, maskRating }) {
       ? `https://codeforces.com/problemset/gymProblem/${problem.contestId}/${problem.index}`
       : `https://codeforces.com/problemset/problem/${problem.contestId}/${problem.index}`;
 
-  // Title color: if done → green, else if rating shown → rating color, else default
   const titleColor = done
     ? "#4ade80"
     : !maskRating && problem.rating
@@ -60,32 +79,40 @@ function ProbCell({ problem, done, maskRating }) {
   return (
     <td style={cellStyle}>
       <a href={href} target="_blank" rel="noreferrer" className="group flex flex-col gap-0.5">
+        {/* Name — truncate with ellipsis */}
         <span
-          className="text-[.82rem] font-medium leading-snug group-hover:underline"
-          style={{ color: titleColor }}
+          style={{
+            color:        titleColor,
+            fontSize:     ".82rem",
+            fontWeight:   500,
+            lineHeight:   "1.3",
+            display:      "block",
+            overflow:     "hidden",
+            whiteSpace:   "nowrap",
+            textOverflow: "ellipsis",
+          }}
+          className="group-hover:underline"
         >
           {problem.index}. {problem.name}
         </span>
 
-        {/* Rating row — always in DOM at fixed height; content swaps, dash stays invisible when masked */}
+        {/* Rating row — fixed height to prevent row-height jitter */}
         <span style={{ display: "block", height: "1.1em", lineHeight: "1.1em" }}>
           {maskRating ? (
-            // masked: show pill for rated, invisible dash for unrated (holds height)
             problem.rating ? (
               <span style={{
                 display: "inline-block", width: "2.2rem", height: "0.6em",
                 backgroundColor: "#2a2a2a", borderRadius: 3, verticalAlign: "middle",
               }} />
             ) : (
-              <span style={{ visibility: "hidden" }} className="text-[.7rem]">—</span>
+              <span style={{ visibility: "hidden", fontSize: ".7rem" }}>—</span>
             )
           ) : problem.rating ? (
-            <span className="text-[.7rem] font-semibold" style={{ color: ratingColor(problem.rating) }}>
+            <span style={{ fontSize: ".7rem", fontWeight: 600, color: ratingColor(problem.rating) }}>
               {problem.rating}
             </span>
           ) : (
-            // unrated + visible: show dim dash
-            <span className="text-[.7rem]" style={{ color: "#2a2a2a" }}>—</span>
+            <span style={{ fontSize: ".7rem", color: "#2a2a2a" }}>—</span>
           )}
         </span>
       </a>
@@ -93,11 +120,82 @@ function ProbCell({ problem, done, maskRating }) {
   );
 }
 
+// ── Content for one half of a split cell (C1 / C2 etc.) ─────────────────────
+function HalfProbContent({ problem, done, maskRating, borderLeft }) {
+  const style = {
+    flex:            "1 1 0",
+    minWidth:        0,           // allows flex children to shrink below content size
+    overflow:        "hidden",
+    padding:         "8px 8px",
+    borderLeft:      borderLeft ? "1px solid #1e2025" : "none",
+    backgroundColor: done ? "rgba(34,197,94,0.12)" : "transparent",
+  };
+
+  if (!problem) return <div style={style} />;
+
+  const href =
+    problem.contestId > 10000
+      ? `https://codeforces.com/problemset/gymProblem/${problem.contestId}/${problem.index}`
+      : `https://codeforces.com/problemset/problem/${problem.contestId}/${problem.index}`;
+
+  const titleColor = done
+    ? "#4ade80"
+    : !maskRating && problem.rating
+      ? ratingColor(problem.rating)
+      : "#c9d1d9";
+
+  return (
+    <div style={style}>
+      <a href={href} target="_blank" rel="noreferrer" className="group flex flex-col gap-0.5">
+        {/* Name — smaller font, aggressive truncation */}
+        <span
+          style={{
+            color:        titleColor,
+            fontSize:     ".75rem",
+            fontWeight:   500,
+            lineHeight:   "1.3",
+            display:      "block",
+            overflow:     "hidden",
+            whiteSpace:   "nowrap",
+            textOverflow: "ellipsis",
+          }}
+          className="group-hover:underline"
+        >
+          {problem.index}. {problem.name}
+        </span>
+
+        {/* Rating row */}
+        <span style={{ display: "block", height: "1.1em", lineHeight: "1.1em" }}>
+          {maskRating ? (
+            problem.rating ? (
+              <span style={{
+                display: "inline-block", width: "1.6rem", height: "0.6em",
+                backgroundColor: "#2a2a2a", borderRadius: 3, verticalAlign: "middle",
+              }} />
+            ) : (
+              <span style={{ visibility: "hidden", fontSize: ".65rem" }}>—</span>
+            )
+          ) : problem.rating ? (
+            <span style={{ fontSize: ".65rem", fontWeight: 600, color: ratingColor(problem.rating) }}>
+              {problem.rating}
+            </span>
+          ) : (
+            <span style={{ fontSize: ".65rem", color: "#2a2a2a" }}>—</span>
+          )}
+        </span>
+      </a>
+    </div>
+  );
+}
+
 // ── One <tr> per contest ─────────────────────────────────────────────────────
 function ContestRow({ contest, isSolved, maskRating, rowNo }) {
+  // Count solved — includes both direct problems and sub-problems (C1, C2…)
   const solvedCount = COL_LETTERS.reduce((acc, col) => {
-    const p = contest.problems.get(col);
-    return acc + (p && isSolved(p.contestId, p.index) ? 1 : 0);
+    const direct = contest.problems.get(col);
+    if (direct) return acc + (isSolved(direct.contestId, direct.index) ? 1 : 0);
+    const subs = getSubProblems(contest.problems, col);
+    return acc + subs.filter((p) => isSolved(p.contestId, p.index)).length;
   }, 0);
 
   const noCellStyle = {
@@ -156,9 +254,48 @@ function ContestRow({ contest, isSolved, maskRating, rowNo }) {
       </td>
 
       {COL_LETTERS.map((col) => {
-        const p    = contest.problems.get(col) ?? null;
-        const done = p ? isSolved(p.contestId, p.index) : false;
-        return <ProbCell key={col} problem={p} done={done} maskRating={maskRating} />;
+        // ── Case 1: direct problem (e.g. "C") ──────────────────────────────
+        const direct = contest.problems.get(col);
+        if (direct) {
+          return (
+            <ProbCell
+              key={col}
+              problem={direct}
+              done={isSolved(direct.contestId, direct.index)}
+              maskRating={maskRating}
+            />
+          );
+        }
+
+        // ── Case 2: numbered sub-problems (e.g. "C1", "C2") ───────────────
+        const subs = getSubProblems(contest.problems, col);
+        if (subs.length > 0) {
+          return (
+            <td
+              key={col}
+              style={{
+                ...probCellBase,
+                padding: 0,
+              }}
+            >
+              {/* flex row — each sub-problem gets an equal slice of the cell */}
+              <div style={{ display: "flex", alignItems: "stretch", height: "100%" }}>
+                {subs.map((p, i) => (
+                  <HalfProbContent
+                    key={p.index}
+                    problem={p}
+                    done={isSolved(p.contestId, p.index)}
+                    maskRating={maskRating}
+                    borderLeft={i > 0}
+                  />
+                ))}
+              </div>
+            </td>
+          );
+        }
+
+        // ── Case 3: no problem for this column ─────────────────────────────
+        return <ProbCell key={col} problem={null} done={false} maskRating={maskRating} />;
       })}
     </tr>
   );
@@ -247,8 +384,12 @@ export default function Contests() {
       {/* Controls */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="1" variant={maskRating ? "solid" : "soft"} color={maskRating ? "amber" : "gray"}
-            onClick={() => setMaskRating((v) => !v)}>
+          <Button
+            size="1"
+            variant={maskRating ? "solid" : "soft"}
+            color={maskRating ? "amber" : "gray"}
+            onClick={() => setMaskRating((v) => !v)}
+          >
             {maskRating ? <EyeNoneIcon width={13} height={13} /> : <EyeOpenIcon width={13} height={13} />}
             {maskRating ? "Ratings hidden" : "Hide ratings"}
           </Button>
@@ -269,27 +410,36 @@ export default function Contests() {
       {/* Division tabs */}
       <div className="mb-3 flex flex-wrap gap-1">
         {DIV_TABS.map((tab, i) => (
-          <button key={tab.label} onClick={() => setActiveTab(i)}
+          <button
+            key={tab.label}
+            onClick={() => setActiveTab(i)}
             className={`rounded px-3 py-1 text-xs font-semibold transition-all duration-100 ring-1 ${
               activeTab === i
                 ? "bg-[#1e3a5c] text-white ring-[#2d5c8a]"
                 : "bg-[#111] text-[#666] ring-[#2e3135] hover:text-[#aaa]"
-            }`}>
+            }`}
+          >
             {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Pagination — on top */}
+      {/* Pagination */}
       {totalPages > 1 && (
         <div className="mb-3 flex items-center gap-2">
-          <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
-            className="rounded border border-[#2e3135] px-3 py-1 text-xs text-[#888] transition hover:border-[#555] hover:text-white disabled:opacity-30">
+          <button
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={page === 0}
+            className="rounded border border-[#2e3135] px-3 py-1 text-xs text-[#888] transition hover:border-[#555] hover:text-white disabled:opacity-30"
+          >
             ← Prev
           </button>
           <span className="text-xs text-[#555]">{page + 1} / {totalPages}</span>
-          <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}
-            className="rounded border border-[#2e3135] px-3 py-1 text-xs text-[#888] transition hover:border-[#555] hover:text-white disabled:opacity-30">
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={page === totalPages - 1}
+            className="rounded border border-[#2e3135] px-3 py-1 text-xs text-[#888] transition hover:border-[#555] hover:text-white disabled:opacity-30"
+          >
             Next →
           </button>
         </div>
@@ -297,11 +447,13 @@ export default function Contests() {
 
       {/* Scrollable table */}
       <div className="overflow-x-auto rounded border border-[#1e2025]">
-        <table style={{
-          borderCollapse: "collapse",
-          tableLayout:    "fixed",
-          minWidth:       NO_COL_W + CONTEST_COL_W + COL_LETTERS.length * PROB_COL_W,
-        }}>
+        <table
+          style={{
+            borderCollapse: "collapse",
+            tableLayout:    "fixed",
+            minWidth:       NO_COL_W + CONTEST_COL_W + COL_LETTERS.length * PROB_COL_W,
+          }}
+        >
           <colgroup>
             <col style={{ width: NO_COL_W }} />
             <col style={{ width: CONTEST_COL_W }} />
@@ -311,8 +463,12 @@ export default function Contests() {
           </colgroup>
           <thead>
             <tr>
-              <th style={{ ...stickyThStyle, width: NO_COL_W, minWidth: NO_COL_W, left: 0, textAlign: "center" }}>No.</th>
-              <th style={{ ...stickyThStyle, width: CONTEST_COL_W, minWidth: CONTEST_COL_W, left: NO_COL_W }}>Contest</th>
+              <th style={{ ...stickyThStyle, width: NO_COL_W, minWidth: NO_COL_W, left: 0, textAlign: "center" }}>
+                No.
+              </th>
+              <th style={{ ...stickyThStyle, width: CONTEST_COL_W, minWidth: CONTEST_COL_W, left: NO_COL_W }}>
+                Contest
+              </th>
               {COL_LETTERS.map((col) => (
                 <th key={col} style={thStyle}>{col}</th>
               ))}
@@ -321,8 +477,10 @@ export default function Contests() {
           <tbody>
             {pageContests.length === 0 ? (
               <tr>
-                <td colSpan={COL_LETTERS.length + 2}
-                  style={{ padding: "32px", textAlign: "center", color: "#444", fontSize: ".85rem" }}>
+                <td
+                  colSpan={COL_LETTERS.length + 2}
+                  style={{ padding: "32px", textAlign: "center", color: "#444", fontSize: ".85rem" }}
+                >
                   No contests found
                 </td>
               </tr>
