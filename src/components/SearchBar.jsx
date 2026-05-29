@@ -19,36 +19,42 @@ export default function SearchBar() {
   const inputRef = useRef(null);
   const navigate = useNavigate();
 
+  // Sync the search bar text with the current route params.
+  // Only runs when the route actually changes, never triggers navigation.
   useEffect(() => {
     if (x.id) setSearchText(x.id);
     else if (x.contest && x.index) setSearchText(`${x.contest}/${x.index}`);
     else setSearchText("");
   }, [x.contest, x.id, x.index]);
 
-  console.log(searchText);
-  
   const handleSearchChange = (event) => {
     setSearchText(event.target.value);
-    // console.log(event.target.value);
   };
+
   const handleSearchText = useCallback(
     function handleSearchText(text) {
-      if (text === "") {
+      const trimmed = text.trim();
+      if (trimmed === "") {
         toast.error("Invalid search query", {
           icon: <MagnifyingGlassIcon height="16" width="16" color="#ffffff" />,
           description: "Please enter a valid search query",
         });
         return;
       }
-      if (text.indexOf("/") === -1) {
-        const currentURL = window.location.href.split("/");
-        // console.log(currentURL);
-        // navigate(`/user/${text}`);
-        // if (currentURL.includes(`/user/${text}`)) navigate(0);
-        if (currentURL.includes(text) && currentURL.includes("user")) navigate(0);
-        else navigate(`/user/${text}`);
+
+      if (trimmed.indexOf("/") === -1) {
+        // Username search
+        // If we're already on this user's page, force a refresh; otherwise navigate.
+        const onSamePage =
+          window.location.pathname === `/user/${trimmed}`;
+        if (onSamePage) {
+          navigate(0);
+        } else {
+          navigate(`/user/${trimmed}`);
+        }
       } else {
-        const problem = extractIdAndIndex(text);
+        // Problem search
+        const problem = extractIdAndIndex(trimmed);
         if (problem === null) {
           toast.error("Invalid search query", {
             icon: (
@@ -58,15 +64,14 @@ export default function SearchBar() {
           });
           return;
         }
-        // console.log(text);
-        // console.log(problem);
 
-        const currentURL = window.location.href;
-        // console.log(currentURL);
-        // navigate(`/problem/${problem.number}/${problem.index}`);
-        if (currentURL.includes(`/problem/${problem.number}/${problem.index}`))
+        const target = `/problem/${problem.number}/${problem.index}`;
+        const onSamePage = window.location.pathname === target;
+        if (onSamePage) {
           navigate(0);
-        navigate(`/problem/${problem.number}/${problem.index}`);
+        } else {
+          navigate(target);
+        }
       }
     },
     [navigate],
