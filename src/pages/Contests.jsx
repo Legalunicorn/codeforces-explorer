@@ -1,5 +1,5 @@
 // src/pages/Contests.jsx
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchProblems } from "../context/problemset/problemsetSlice";
 import { useViewerProblems } from "../hooks/useViewerProblems";
@@ -9,7 +9,6 @@ import { ratingColor } from "../utils/ratingColor";
 import { Button } from "@radix-ui/themes";
 import { EyeNoneIcon, EyeOpenIcon, MagnifyingGlassIcon } from "@radix-ui/react-icons";
 
-// ── Division tab matchers ─────────────────────────────────────────────────────
 const DIV_TABS = [
   { label: "All",         match: () => true },
   { label: "Div. 1",      match: (n) => /div\.?\s*1/i.test(n) && !/div\.?\s*2/i.test(n) },
@@ -23,340 +22,166 @@ const DIV_TABS = [
       !/div\.?\s*[1-4]/i.test(n) && !/educational/i.test(n) && !/global/i.test(n) },
 ];
 
-const ALL_LETTERS   = ["A","B","C","D","E","F","G","H","I","J"];
-const NO_COL_W      = 44;
-const CONTEST_COL_W = 260;
-const PROB_COL_W    = 190;
+const ALL_LETTERS = ["A","B","C","D","E","F","G","H","I","J","K", "L", "M", "N", "O","P","Q","R","S","T","U","V","W","X","Y","Z"];
+const NO_COL_W      = 36;
+const CONTEST_COL_W = 120;
+const PROB_COL_W    = 140;
 const PAGE_SIZE     = 50;
 
-// ── localStorage cache ────────────────────────────────────────────────────────
-const CACHE_KEY = "cfe-standings-v8";
-const CACHE_TTL = 24 * 60 * 60 * 1000;
-
-function loadCache() {
-  try { return JSON.parse(localStorage.getItem(CACHE_KEY) || "{}"); }
-  catch { return {}; }
-}
-function saveCache(cache) {
-  try {
-    const now    = Date.now();
-    const pruned = {};
-    for (const [id, entry] of Object.entries(cache)) {
-      if (now - entry.ts < CACHE_TTL) pruned[id] = entry;
-    }
-    localStorage.setItem(CACHE_KEY, JSON.stringify(pruned));
-  } catch {}
-}
-
-// ── Semaphore ─────────────────────────────────────────────────────────────────
-function makeSemaphore(n) {
-  let running = 0;
-  const queue = [];
-  return (fn) => new Promise((resolve, reject) => {
-    const run = () => {
-      running++;
-      Promise.resolve().then(fn).then(
-        (v) => { running--; if (queue.length) queue.shift()(); resolve(v); },
-        (e) => { running--; if (queue.length) queue.shift()(); reject(e); },
-      );
-    };
-    running < n ? run() : queue.push(run);
-  });
-}
-const sem = makeSemaphore(3);
-
-// ── Fetch a single contest's full problem list via contest.standings ──────────
-async function fetchStandingsProblems(contestId) {
-  const res = await fetch(
-    `https://codeforces.com/api/contest.standings?contestId=${contestId}&from=1&count=1&showUnofficial=false`
-  );
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
-  if (data.status !== "OK") throw new Error(data.comment ?? "CF API error");
-  return (data.result.problems ?? []).map((p) => ({
-    name:      p.name,
-    index:     p.index,
-    rating:    p.rating ?? undefined,
-    tags:      p.tags ?? [],
-    contestId: p.contestId ?? contestId,
-  }));
-}
-
-// ── Build Record<baseLetter, Problem[]> ───────────────────────────────────────
-function buildProblemList(probs) {
-  const pl = {};
-  for (const p of probs) {
-    const base = p.index.charAt(0);
-    if (!pl[base]) pl[base] = [];
-    if (!pl[base].some((x) => x.index === p.index)) {
-      pl[base].push(p);
-      pl[base].sort((a, b) => a.index.localeCompare(b.index));
-    }
+function shortName(raw) {
+  const edu = raw.match(/educational\s+codeforces\s+round\s+#?(\d+)/i);
+  if (edu) return `EDU ${edu[1]}`;
+  const gl = raw.match(/codeforces\s+global\s+round\s+#?(\d+)/i);
+  if (gl) return `Global ${gl[1]}`;
+  const cf = raw.match(/codeforces\s+round\s+#?(\d+)/i);
+  if (cf) {
+    const n = cf[1];
+    const d12 = /div\.?\s*1/i.test(raw) && /div\.?\s*2/i.test(raw);
+    const d1  = /div\.?\s*1/i.test(raw) && !d12;
+    const d2  = /div\.?\s*2/i.test(raw) && !d12;
+    const d3  = /div\.?\s*3/i.test(raw);
+    const d4  = /div\.?\s*4/i.test(raw);
+    const tag = d12 ? " (1+2)" : d1 ? " (D1)" : d2 ? " (D2)" : d3 ? " (D3)" : d4 ? " (D4)" : "";
+    return `CF ${n}${tag}`;
   }
-  return pl;
+  return raw.length > 22 ? raw.slice(0, 20) + "…" : raw;
 }
 
-function getMxInd(problemList) {
+function maxCols(pl) {
   let mx = 0;
-  for (const base of Object.keys(problemList)) {
+  for (const base of Object.keys(pl)) {
     const n = base.charCodeAt(0) - 65 + 1;
     if (n > mx) mx = n;
   }
   return mx;
 }
 
-// ── Coupled round detection ───────────────────────────────────────────────────
-// More robust detection using both name matching and problem overlap analysis
-function makeCoupledMap(allContests) {
-  const coupled = new Map();
-  
-  // Method 1: Name-based detection (improved)
-  const normalize = (name) =>
-    name.replace(/div\.?\s*[12]/gi, "DIVX")
-        .replace(/codeforces\s*round/gi, "CFR")
-        .replace(/\s*\(.*?\)\s*/g, "") // Remove parenthetical notes
-        .replace(/\s+/g, " ")
-        .toLowerCase()
-        .trim();
-
-  const byNorm = new Map();
-  for (const c of allContests) {
-    const norm = normalize(c.name);
-    if (!byNorm.has(norm)) byNorm.set(norm, []);
-    byNorm.get(norm).push(c);
-  }
-
-  for (const group of byNorm.values()) {
-    if (group.length !== 2) continue;
-    const [a, b] = group;
-    const aDiv1 = /div\.?\s*1/i.test(a.name) && !/div\.?\s*2/i.test(a.name);
-    const aDiv2 = /div\.?\s*2/i.test(a.name) && !/div\.?\s*1/i.test(a.name);
-    const bDiv1 = /div\.?\s*1/i.test(b.name) && !/div\.?\s*2/i.test(b.name);
-    const bDiv2 = /div\.?\s*2/i.test(b.name) && !/div\.?\s*1/i.test(b.name);
-    
-    if ((aDiv1 && bDiv2) || (aDiv2 && bDiv1)) {
-      coupled.set(a.id, b.id);
-      coupled.set(b.id, a.id);
-    }
-  }
-
-  // Method 2: Temporal proximity + problem overlap detection
-  // Some coupled rounds might have different names (e.g., "Codeforces Round #123 (Div. 1)" vs "Codeforces Round #123 (Div. 2)")
-  const sorted = [...allContests].sort((a, b) => a.startTimeSeconds - b.startTimeSeconds);
-  
-  for (let i = 0; i < sorted.length; i++) {
-    for (let j = i + 1; j < sorted.length; j++) {
-      const a = sorted[i];
-      const b = sorted[j];
-      
-      // Skip if already coupled or time difference too large
-      if (coupled.has(a.id) || coupled.has(b.id)) continue;
-      if (Math.abs(a.startTimeSeconds - b.startTimeSeconds) > 86400) break; // 24 hours max
-      
-      // Check for problem overlap (same letter problems with same names)
-      const aProbs = Object.values(a.problemList).flat();
-      const bProbs = Object.values(b.problemList).flat();
-      
-      if (aProbs.length === 0 || bProbs.length === 0) continue;
-      
-      const aNames = new Set(aProbs.map(p => p.name.toLowerCase().trim()));
-      const bNames = new Set(bProbs.map(p => p.name.toLowerCase().trim()));
-      
-      let overlapCount = 0;
-      for (const name of aNames) {
-        if (bNames.has(name)) overlapCount++;
-      }
-      
-      // If significant overlap and one is Div.1 and other is Div.2
-      const aDiv1 = /div\.?\s*1/i.test(a.name) && !/div\.?\s*2/i.test(a.name);
-      const aDiv2 = /div\.?\s*2/i.test(a.name) && !/div\.?\s*1/i.test(a.name);
-      const bDiv1 = /div\.?\s*1/i.test(b.name) && !/div\.?\s*2/i.test(b.name);
-      const bDiv2 = /div\.?\s*2/i.test(b.name) && !/div\.?\s*1/i.test(b.name);
-      
-      if (overlapCount >= Math.min(3, Math.min(aProbs.length, bProbs.length))) {
-        if ((aDiv1 && bDiv2) || (aDiv2 && bDiv1)) {
-          coupled.set(a.id, b.id);
-          coupled.set(b.id, a.id);
-        }
-      }
-    }
-  }
-
-  return coupled;
-}
-
-// ── Cell styles ───────────────────────────────────────────────────────────────
 const cellBase = {
   width: PROB_COL_W, minWidth: PROB_COL_W, maxWidth: PROB_COL_W,
   borderRight: "1px solid #1e2025", borderBottom: "1px solid #1e2025",
   verticalAlign: "middle", overflow: "hidden",
 };
 
-function ProbCell({ problem, done, maskRating }) {
-  const style = { ...cellBase, padding: "9px 11px", backgroundColor: done ? "rgba(34,197,94,0.12)" : "transparent" };
-  if (!problem) return <td style={style} />;
-  const href = problem.contestId > 10000
-    ? `https://codeforces.com/problemset/gymProblem/${problem.contestId}/${problem.index}`
-    : `https://codeforces.com/problemset/problem/${problem.contestId}/${problem.index}`;
-  const color = done ? "#4ade80" : (!maskRating && problem.rating) ? ratingColor(problem.rating) : "#c9d1d9";
+function ProbCell({ p, done, mask }) {
+  if (!p) return <td style={{ ...cellBase, padding: "7px 8px" }} />;
+  const href = p.contestId > 10000
+    ? `https://codeforces.com/problemset/gymProblem/${p.contestId}/${p.index}`
+    : `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`;
+  const color = done ? "#4ade80" : (!mask && p.rating) ? ratingColor(p.rating) : "#c9d1d9";
   return (
-    <td style={style}>
+    <td style={{ ...cellBase, padding: "7px 8px", backgroundColor: done ? "rgba(34,197,94,0.12)" : "transparent" }}>
       <a href={href} target="_blank" rel="noreferrer" className="group flex flex-col gap-0.5">
-        <span style={{ color, fontSize:".82rem", fontWeight:500, lineHeight:"1.3",
-          display:"block", overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" }}
-          className="group-hover:underline">
-          {problem.index}. {problem.name}
+        <span style={{
+          color, fontSize: ".78rem", fontWeight: 500, lineHeight: "1.3",
+          display: "block", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis"
+        }} className="group-hover:underline">
+          {p.index}. {p.name}
         </span>
-        <span style={{ display:"block", height:"1.1em", lineHeight:"1.1em" }}>
-          {maskRating
-            ? problem.rating
-                ? <span style={{ display:"inline-block", width:"2.2rem", height:"0.6em", backgroundColor:"#2a2a2a", borderRadius:3, verticalAlign:"middle" }} />
-                : <span style={{ visibility:"hidden", fontSize:".7rem" }}>—</span>
-            : problem.rating
-                ? <span style={{ fontSize:".7rem", fontWeight:600, color:ratingColor(problem.rating) }}>{problem.rating}</span>
-                : <span style={{ fontSize:".7rem", color:"#2a2a2a" }}>—</span>
-          }
+        <span style={{ display: "block", height: "1em" }}>
+          {!mask && p.rating && <span style={{ fontSize: ".65rem", fontWeight: 600, color: ratingColor(p.rating) }}>{p.rating}</span>}
+          {mask  && p.rating && <span style={{ display: "inline-block", width: "2rem", height: "0.55em", backgroundColor: "#2a2a2a", borderRadius: 3 }} />}
         </span>
       </a>
     </td>
   );
 }
 
-function HalfProb({ problem, done, maskRating, borderLeft }) {
-  const style = {
-    flex:"1 1 0", 
-    minWidth:0, 
-    overflow:"hidden", 
-    padding:"9px 8px",
-    borderLeft: borderLeft ? "1px solid #1e2025" : "none",
-    backgroundColor: done ? "rgba(34,197,94,0.12)" : "transparent",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-  };
-  if (!problem) return <div style={style} />;
-  const href = problem.contestId > 10000
-    ? `https://codeforces.com/problemset/gymProblem/${problem.contestId}/${problem.index}`
-    : `https://codeforces.com/problemset/problem/${problem.contestId}/${problem.index}`;
-  const color = done ? "#4ade80" : (!maskRating && problem.rating) ? ratingColor(problem.rating) : "#c9d1d9";
-  return (
-    <div style={style}>
-      <a href={href} target="_blank" rel="noreferrer" className="group flex flex-col gap-0.5">
-        <span style={{ color, fontSize:".75rem", fontWeight:500, lineHeight:"1.3",
-          display:"block", overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" }}
-          className="group-hover:underline">
-          {problem.index}. {problem.name}
-        </span>
-        <span style={{ display:"block", height:"1.1em", lineHeight:"1.1em" }}>
-          {maskRating
-            ? problem.rating
-                ? <span style={{ display:"inline-block", width:"1.6rem", height:"0.6em", backgroundColor:"#2a2a2a", borderRadius:3, verticalAlign:"middle" }} />
-                : <span style={{ visibility:"hidden", fontSize:".65rem" }}>—</span>
-            : problem.rating
-                ? <span style={{ fontSize:".65rem", fontWeight:600, color:ratingColor(problem.rating) }}>{problem.rating}</span>
-                : <span style={{ fontSize:".65rem", color:"#2a2a2a" }}>—</span>
-          }
-        </span>
-      </a>
-    </div>
-  );
-}
-
-function ProbsCell({ problems, isSolved, maskRating }) {
-  if (!problems || problems.length === 0) {
-    return <td style={{ ...cellBase, padding:"9px 11px" }} />;
-  }
-  if (problems.length === 1) {
-    const p = problems[0];
-    return <ProbCell problem={p} done={isSolved(p.contestId, p.index)} maskRating={maskRating} />;
+function ProbsCell({ probs, isSolved, mask }) {
+  if (!probs?.length) return <td style={{ ...cellBase, padding: "7px 8px" }} />;
+  if (probs.length === 1) {
+    const p = probs[0];
+    return <ProbCell p={p} done={isSolved(p.contestId, p.index)} mask={mask} />;
   }
   return (
-    <td style={{ ...cellBase, padding:0, position: "relative" }}>
-      <div style={{ 
-        display:"flex", 
-        position: "absolute",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        alignItems:"stretch"
-      }}>
-        {problems.map((p, i) => (
-          <HalfProb key={p.index} problem={p} done={isSolved(p.contestId, p.index)}
-            maskRating={maskRating} borderLeft={i > 0} />
-        ))}
+    <td style={{ ...cellBase, padding: 0, position: "relative" }}>
+      <div style={{ display: "flex", position: "absolute", inset: 0, alignItems: "stretch" }}>
+        {probs.map((p, i) => {
+          const done = isSolved(p.contestId, p.index);
+          const href = `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`;
+          const color = done ? "#4ade80" : (!mask && p.rating) ? ratingColor(p.rating) : "#c9d1d9";
+          return (
+            <div key={p.index} style={{
+              flex: "1 1 0", minWidth: 0, overflow: "hidden", padding: "7px 6px",
+              borderLeft: i > 0 ? "1px solid #1e2025" : "none",
+              backgroundColor: done ? "rgba(34,197,94,0.12)" : "transparent",
+              display: "flex", flexDirection: "column", justifyContent: "center",
+            }}>
+              <a href={href} target="_blank" rel="noreferrer" className="group flex flex-col gap-0.5">
+                <span style={{ color, fontSize: ".72rem", fontWeight: 500, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}
+                  className="group-hover:underline">{p.index}. {p.name}</span>
+                {!mask && p.rating && <span style={{ fontSize: ".62rem", fontWeight: 600, color: ratingColor(p.rating) }}>{p.rating}</span>}
+              </a>
+            </div>
+          );
+        })}
       </div>
     </td>
   );
 }
 
-function ContestRow({ contest, isSolved, maskRating, rowNo, numCols }) {
+function ContestRow({ contest, isSolved, mask, rowNo, numCols }) {
   const allProbs = Object.values(contest.problemList).flat();
-  const solved   = allProbs.filter((p) => isSolved(p.contestId, p.index)).length;
-  const total    = allProbs.length;
-
-  const noStyle = {
-    width:NO_COL_W, minWidth:NO_COL_W, maxWidth:NO_COL_W,
-    borderRight:"1px solid #1e2025", borderBottom:"1px solid #1e2025",
-    backgroundColor:"#0a0b0c", padding:"9px 6px", verticalAlign:"middle",
-    textAlign:"center", fontSize:".7rem", color:"#444",
-    position:"sticky", left:0, zIndex:1,
-  };
-  const nameStyle = {
-    width:CONTEST_COL_W, minWidth:CONTEST_COL_W, maxWidth:CONTEST_COL_W,
-    borderRight:"1px solid #1e2025", borderBottom:"1px solid #1e2025",
-    backgroundColor:"#0a0b0c", padding:"9px 12px", verticalAlign:"middle",
-    position:"sticky", left:NO_COL_W, zIndex:1,
-  };
-
+  const solved = allProbs.filter((p) => isSolved(p.contestId, p.index)).length;
   return (
     <tr>
-      <td style={noStyle}>{rowNo}</td>
-      <td style={nameStyle}>
-        <a href={`https://codeforces.com/contest/${contest.id}`}
-          target="_blank" rel="noreferrer" className="group block">
-          <span className="block text-[.8rem] font-semibold leading-snug text-[#bbb] group-hover:text-white group-hover:underline transition">
-            {contest.name}
-          </span>
-          <div className="mt-1 flex items-center gap-2">
-            <span className="text-[.65rem] text-[#444]">#{contest.id}</span>
+      {/* No. */}
+      <td style={{
+        width: NO_COL_W, minWidth: NO_COL_W, maxWidth: NO_COL_W,
+        borderRight: "1px solid #1e2025", borderBottom: "1px solid #1e2025",
+        backgroundColor: "#0a0b0c", padding: "7px 4px", textAlign: "center",
+        fontSize: ".7rem", color: "#444", position: "sticky", left: 0, zIndex: 1,
+      }}>{rowNo}</td>
+
+      {/* Contest name cell — name on row 1, meta on row 2 */}
+      <td style={{
+        width: CONTEST_COL_W, minWidth: CONTEST_COL_W, maxWidth: CONTEST_COL_W,
+        borderRight: "1px solid #1e2025", borderBottom: "1px solid #1e2025",
+        backgroundColor: "#0a0b0c", padding: "7px 10px", verticalAlign: "top",
+        position: "sticky", left: NO_COL_W, zIndex: 1,
+      }}>
+        <a href={`https://codeforces.com/contest/${contest.id}`} target="_blank" rel="noreferrer" className="group block">
+          {/* Row 1: contest name */}
+          <span className="block text-[.76rem] font-semibold leading-snug text-[#bbb] group-hover:text-white group-hover:underline transition"
+            title={contest.name}>{shortName(contest.name)}</span>
+          {/* Row 2: id · date · solved */}
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="text-[.6rem] text-[#3a3a3a]">#{contest.id}</span>
             {contest.startTimeSeconds > 0 && (
-              <span className="text-[.65rem] text-[#3a3a3a]">
-                {new Date(contest.startTimeSeconds * 1000).toLocaleDateString("en-US",
-                  { year:"numeric", month:"short", day:"numeric" })}
+              <span className="text-[.6rem] text-[#3a3a3a]">
+                {new Date(contest.startTimeSeconds * 1000).toLocaleDateString("en-US", { year: "numeric", month: "short" })}
               </span>
             )}
-            {solved > 0 && (
-              <span className="text-[.65rem] font-semibold text-[#4ade80]">
-                {solved}/{total} solved
-              </span>
-            )}
+            {/* {solved > 0 && (
+              <span className="text-[.6rem] font-bold text-[#4ade80]">{solved}/{allProbs.length}</span>
+            )} */}
           </div>
+          {solved > 0 && (
+  <div className="mt-1">
+    <span className="text-[.65rem] font-bold text-[#4ade80]">{solved}/{allProbs.length} solved</span>
+  </div>
+)}
+
+
         </a>
       </td>
+
+      {/* Problem cells */}
       {ALL_LETTERS.slice(0, numCols).map((col) => (
-        <ProbsCell key={col} problems={contest.problemList[col] ?? []}
-          isSolved={isSolved} maskRating={maskRating} />
+        <ProbsCell key={col} probs={contest.problemList[col] ?? []} isSolved={isSolved} mask={mask} />
       ))}
     </tr>
   );
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
 export default function Contests() {
   const dispatch = useDispatch();
   const { problems, contestNames, isLoading, errorMsg } = useSelector((s) => s.problemset);
   const { isSolved } = useViewerProblems();
 
-  const [maskRating,       setMaskRating]      = useState(false);
-  const [activeTab,        setActiveTab]        = useState(0);
-  const [search,           setSearch]           = useState("");
-  const [page,             setPage]             = useState(0);
-  const [loadingStandings, setLoadingStandings] = useState(false);
-
-  const [cache, setCache] = useState(() => loadCache());
-
-  const inFlight = useRef(new Set());
+  const [maskRating, setMaskRating] = useState(false);
+  const [activeTab,  setActiveTab]  = useState(0);
+  const [search,     setSearch]     = useState("");
+  const [page,       setPage]       = useState(0);
 
   useEffect(() => { dispatch(fetchProblems()); }, [dispatch]);
 
@@ -364,31 +189,32 @@ export default function Contests() {
   useEffect(() => {
     fetch("https://codeforces.com/api/contest.list?gym=false")
       .then((r) => r.json())
-      .then((data) => {
-        if (data.status !== "OK") return;
+      .then((d) => {
+        if (d.status !== "OK") return;
         const m = new Map();
-        data.result.forEach((c) => m.set(c.id, { name: c.name, startTimeSeconds: c.startTimeSeconds }));
+        d.result.forEach((c) => m.set(c.id, { name: c.name, startTimeSeconds: c.startTimeSeconds }));
         setContestMeta(m);
       })
       .catch(() => {});
   }, []);
 
-  const baseMap = useMemo(() => {
+  const allContests = useMemo(() => {
     const map = new Map();
 
+    // Step 1: build raw map from problemset.problems
     problems.forEach((p) => {
       if (p.contestId >= 100000) return;
       if (!map.has(p.contestId)) {
         const meta = contestMeta.get(p.contestId);
         map.set(p.contestId, {
-          id:               p.contestId,
-          name:             meta?.name ?? contestNames?.[p.contestId] ?? p.contestName ?? `Contest ${p.contestId}`,
+          id: p.contestId,
+          name: meta?.name ?? contestNames?.[p.contestId] ?? `Contest ${p.contestId}`,
           startTimeSeconds: meta?.startTimeSeconds ?? 0,
-          problemList:      {},
+          problemList: {},
         });
       }
       const c = map.get(p.contestId);
-      const base = p.index.charAt(0);
+      const base = p.index[0];
       if (!c.problemList[base]) c.problemList[base] = [];
       if (!c.problemList[base].some((x) => x.index === p.index)) {
         c.problemList[base].push(p);
@@ -396,34 +222,98 @@ export default function Contests() {
       }
     });
 
+    // Ensure all contests from contestMeta appear
     contestMeta.forEach((meta, id) => {
       if (id >= 100000) return;
       if (!map.has(id)) {
         map.set(id, { id, name: meta.name, startTimeSeconds: meta.startTimeSeconds, problemList: {} });
       } else {
         const c = map.get(id);
-        c.name             = meta.name;
+        c.name = meta.name;
         c.startTimeSeconds = meta.startTimeSeconds;
       }
     });
 
-    return map;
+    // Step 2: Div.1 / Div.2 shared-problem mapping.
+    //
+    // In a paired round, Div.2 has its own A and B (easy problems),
+    // then shares C, D, E, … with Div.1's A, B, C, …
+    // i.e.  Div.2[C] = Div.1[A], Div.2[D] = Div.1[B], Div.2[E] = Div.1[C], …
+    //
+    // The CF problemset API only returns problems under their *original* contest ID.
+    // Shared problems are stored under the Div.1 contest ID, so Div.2's C/D/E/…
+    // are missing from the raw map — we need to fill them in.
+    //
+    // Strategy:
+    //   • Find how many problems Div.2 already has on its own (call it `div2Own`).
+    //     These are the A/B (and occasionally A/B/C) problems exclusive to Div.2.
+    //   • The Div.1 problems then fill the remaining Div.2 slots starting at
+    //     letter index `div2Own` (0-based), mapped from Div.1 letter index 0.
+    //   i.e. Div.2 letter (div2Own + k)  ←  Div.1 letter k,  for k = 0, 1, 2, …
+
+    function stripDiv(name) {
+      return name
+        .replace(/\(div\.?\s*[12][^)]*\)/gi, "")
+        .replace(/div\.?\s*[12]/gi, "")
+        .replace(/\s+/g, " ").trim().toLowerCase();
+    }
+
+    const byNorm = new Map();
+    for (const c of map.values()) {
+      const key = stripDiv(c.name);
+      if (!byNorm.has(key)) byNorm.set(key, []);
+      byNorm.get(key).push(c);
+    }
+
+    for (const group of byNorm.values()) {
+      const div1 = group.find((c) => /div\.?\s*1/i.test(c.name) && !/div\.?\s*2/i.test(c.name));
+      const div2 = group.find((c) => /div\.?\s*2/i.test(c.name) && !/div\.?\s*1/i.test(c.name));
+      if (!div1 || !div2) continue;
+      if (Math.abs(div1.startTimeSeconds - div2.startTimeSeconds) > 3600) continue;
+
+      // How many letter-slots does Div.2 already own?
+      // Count consecutive letters starting from A that exist in Div.2 but NOT in Div.1.
+      // (Div.1 may have A/B/C; we want only the ones exclusive to Div.2.)
+      const div2Letters = Object.keys(div2.problemList).sort();
+      const div1Letters = new Set(Object.keys(div1.problemList));
+
+      // div2Own = number of leading letters in Div.2 that don't appear in Div.1 at all.
+      // Usually 2 (A and B), sometimes 3.
+      let div2Own = 0;
+      for (const letter of div2Letters) {
+        if (!div1Letters.has(letter)) div2Own++;
+        else break; // stop at first shared letter slot
+      }
+      // Fallback: if everything overlaps (odd edge case), assume offset of 2
+      if (div2Own === 0) div2Own = 2;
+
+      // Now map Div.1[A,B,C,...] → Div.2[offset, offset+1, offset+2, ...]
+      const div1Sorted = Object.keys(div1.problemList).sort(); // ["A","B","C",...]
+      div1Sorted.forEach((div1Letter, k) => {
+        const div2LetterCode = 65 + div2Own + k; // char code for target Div.2 slot
+        if (div2LetterCode > 74) return; // don't go past J
+        const div2Letter = String.fromCharCode(div2LetterCode);
+
+        // Only fill if Div.2 doesn't already have its own problems in this slot
+        if (!div2.problemList[div2Letter]) {
+          div2.problemList[div2Letter] = div1.problemList[div1Letter].map((p) => ({
+            ...p,
+            // Keep original Div.1 contestId so CF links work correctly;
+            // isSolved uses the handle's submission data which records the actual contestId
+            contestId: p.contestId,
+          }));
+        }
+      });
+    }
+
+    return Array.from(map.values()).sort((a, b) =>
+      b.startTimeSeconds !== a.startTimeSeconds ? b.startTimeSeconds - a.startTimeSeconds : b.id - a.id
+    );
   }, [problems, contestNames, contestMeta]);
-
-  const allContests = useMemo(
-    () => Array.from(baseMap.values()).sort((a, b) =>
-      b.startTimeSeconds !== a.startTimeSeconds
-        ? b.startTimeSeconds - a.startTimeSeconds
-        : b.id - a.id
-    ),
-    [baseMap],
-  );
-
-  const coupledMap = useMemo(() => makeCoupledMap(allContests), [allContests]);
 
   const filtered = useMemo(() => {
     const fn = DIV_TABS[activeTab].match;
-    const q  = search.trim().toLowerCase();
+    const q = search.trim().toLowerCase();
     return allContests.filter((c) => {
       if (!fn(c.name)) return false;
       if (q && !c.name.toLowerCase().includes(q) && !String(c.id).includes(q)) return false;
@@ -431,113 +321,26 @@ export default function Contests() {
     });
   }, [allContests, activeTab, search]);
 
-  const totalPages   = Math.ceil(filtered.length / PAGE_SIZE);
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pageContests = useMemo(
     () => filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE),
     [filtered, page],
   );
   useEffect(() => { setPage(0); }, [activeTab, search]);
 
-  // ── Standings fetch ───────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (pageContests.length === 0) return;
-
-    const now = Date.now();
-
-    // For each contest, also fetch its coupled sibling's standings
-    const candidates = new Set();
-    for (const c of pageContests) {
-      candidates.add(c.id);
-      const sib = coupledMap.get(c.id);
-      if (sib != null) candidates.add(sib);
-    }
-
-    const toFetch = Array.from(candidates).filter((id) => {
-      if (inFlight.current.has(id)) return false;
-      const entry = cache[id];
-      if (!entry) return true;
-      if (now - entry.ts > CACHE_TTL) return true;
-      return false;
-    });
-
-    if (toFetch.length === 0) return;
-
-    toFetch.forEach((id) => inFlight.current.add(id));
-    setLoadingStandings(true);
-
-    Promise.allSettled(
-      toFetch.map((id) =>
-        sem(() => fetchStandingsProblems(id).then((probs) => ({ id, probs })))
-      )
-    ).then((results) => {
-      const now2 = Date.now();
-      setCache((prev) => {
-        const next = { ...prev };
-        results.forEach((r, i) => {
-          const id = toFetch[i];
-          inFlight.current.delete(id);
-          if (r.status === "fulfilled") {
-            next[id] = { pl: buildProblemList(r.value.probs), ts: now2 };
-          }
-        });
-        saveCache(next);
-        return next;
-      });
-      setLoadingStandings(false);
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageContests, coupledMap]);
-
-  // ── Merge problem lists ───────────────────────────────────────────────────────
-  const mergedPage = useMemo(() => {
-    return pageContests.map((contest) => {
-      const siblingId = coupledMap.get(contest.id) ?? null;
-      const ownCached = cache[contest.id];
-      const siblingCached = siblingId != null ? cache[siblingId] : null;
-
-      const merged = {};
-
-      // Collect all base letters from all sources
-      const keys = new Set([
-        ...Object.keys(contest.problemList),
-        ...(ownCached?.pl     ? Object.keys(ownCached.pl)     : []),
-        ...(siblingCached?.pl ? Object.keys(siblingCached.pl) : []),
-      ]);
-
-      for (const base of keys) {
-        const fromPS      = contest.problemList[base]  ?? [];
-        const fromStan    = ownCached?.pl?.[base]      ?? [];
-        const fromSibling = siblingCached?.pl?.[base]  ?? [];
-
-        const byIndex = new Map();
-        
-        // Priority: problemset (has ratings) > own standings > sibling standings
-        // But we want to include ALL problems, not just common ones
-        fromSibling.forEach((p) => byIndex.set(p.index, p));
-        fromStan.forEach((p)    => byIndex.set(p.index, p));
-        fromPS.forEach((p)      => byIndex.set(p.index, p));
-
-        const arr = Array.from(byIndex.values())
-          .sort((a, b) => a.index.localeCompare(b.index));
-        if (arr.length) merged[base] = arr;
-      }
-
-      return { ...contest, problemList: merged, mxInd: getMxInd(merged) };
-    });
-  }, [pageContests, cache, coupledMap]);
-
-  const numCols = useMemo(
-    () => Math.max(8, ...mergedPage.map((c) => c.mxInd)),
-    [mergedPage],
-  );
+  // const numCols = useMemo(
+  //   () => Math.max(6, ...pageContests.map((c) => maxCols(c.problemList))),
+  //   [pageContests],
+  // );
+  const numCols = 26;
 
   if (isLoading) return <CenteredLoader />;
   if (errorMsg)  return <ErrorPage text={errorMsg} />;
 
   const thBase = {
-    borderRight:"1px solid #1e2025", borderBottom:"1px solid #1e2025",
-    padding:"6px 11px", textAlign:"left", fontSize:".75rem",
-    fontWeight:700, color:"#555", backgroundColor:"#0d0e10", whiteSpace:"nowrap",
+    borderRight: "1px solid #1e2025", borderBottom: "1px solid #1e2025",
+    padding: "5px 8px", textAlign: "left", fontSize: ".72rem",
+    fontWeight: 700, color: "#555", backgroundColor: "#0d0e10", whiteSpace: "nowrap",
   };
 
   return (
@@ -549,10 +352,7 @@ export default function Contests() {
             {maskRating ? <EyeNoneIcon width={13} height={13}/> : <EyeOpenIcon width={13} height={13}/>}
             {maskRating ? "Ratings hidden" : "Hide ratings"}
           </Button>
-          <span className="text-xs text-[#555]">
-            {filtered.length} contests
-            {loadingStandings && <span className="ml-2 text-[#444]">· loading problems…</span>}
-          </span>
+          <span className="text-xs text-[#555]">{filtered.length} contests</span>
         </div>
         <div className="flex items-center gap-1 rounded border border-[#2e3135] bg-[#111] px-2 py-1">
           <MagnifyingGlassIcon width={13} height={13} className="text-[#555]"/>
@@ -566,9 +366,7 @@ export default function Contests() {
         {DIV_TABS.map((tab, i) => (
           <button key={tab.label} onClick={() => setActiveTab(i)}
             className={`rounded px-3 py-1 text-xs font-semibold transition-all duration-100 ring-1 ${
-              activeTab === i
-                ? "bg-[#1e3a5c] text-white ring-[#2d5c8a]"
-                : "bg-[#111] text-[#666] ring-[#2e3135] hover:text-[#aaa]"
+              activeTab === i ? "bg-[#1e3a5c] text-white ring-[#2d5c8a]" : "bg-[#111] text-[#666] ring-[#2e3135] hover:text-[#aaa]"
             }`}>
             {tab.label}
           </button>
@@ -591,37 +389,29 @@ export default function Contests() {
 
       <div className="overflow-x-auto rounded border border-[#1e2025]">
         <table style={{
-          borderCollapse:"collapse", tableLayout:"fixed",
-          minWidth: NO_COL_W + CONTEST_COL_W + numCols * PROB_COL_W,
+          borderCollapse: "collapse", tableLayout: "fixed",
+          minWidth: NO_COL_W + CONTEST_COL_W + numCols * PROB_COL_W
         }}>
           <colgroup>
-            <col style={{ width:NO_COL_W }}/>
-            <col style={{ width:CONTEST_COL_W }}/>
-            {ALL_LETTERS.slice(0, numCols).map((col) => (
-              <col key={col} style={{ width:PROB_COL_W }}/>
-            ))}
+            <col style={{ width: NO_COL_W }}/>
+            <col style={{ width: CONTEST_COL_W }}/>
+            {ALL_LETTERS.slice(0, numCols).map((col) => <col key={col} style={{ width: PROB_COL_W }}/>)}
           </colgroup>
           <thead>
             <tr>
-              <th style={{ ...thBase, position:"sticky", left:0, zIndex:2, width:NO_COL_W, minWidth:NO_COL_W, textAlign:"center" }}>No.</th>
-              <th style={{ ...thBase, position:"sticky", left:NO_COL_W, zIndex:2, width:CONTEST_COL_W, minWidth:CONTEST_COL_W }}>Contest</th>
-              {ALL_LETTERS.slice(0, numCols).map((col) => (
-                <th key={col} style={thBase}>{col}</th>
-              ))}
+              <th style={{ ...thBase, position: "sticky", left: 0, zIndex: 2, width: NO_COL_W, textAlign: "center" }}>No.</th>
+              <th style={{ ...thBase, position: "sticky", left: NO_COL_W, zIndex: 2, width: CONTEST_COL_W }}>Contest</th>
+              {ALL_LETTERS.slice(0, numCols).map((col) => <th key={col} style={thBase}>{col}</th>)}
             </tr>
           </thead>
           <tbody>
-            {mergedPage.length === 0 ? (
-              <tr>
-                <td colSpan={numCols + 2}
-                  style={{ padding:"32px", textAlign:"center", color:"#444", fontSize:".85rem" }}>
-                  No contests found
-                </td>
-              </tr>
-            ) : mergedPage.map((contest, i) => (
-              <ContestRow key={contest.id} contest={contest} isSolved={isSolved}
-                maskRating={maskRating} rowNo={page * PAGE_SIZE + i + 1} numCols={numCols} />
-            ))}
+            {pageContests.length === 0
+              ? <tr><td colSpan={numCols+2} style={{ padding: "32px", textAlign: "center", color: "#444", fontSize: ".85rem" }}>No contests found</td></tr>
+              : pageContests.map((contest, i) => (
+                  <ContestRow key={contest.id} contest={contest} isSolved={isSolved}
+                    mask={maskRating} rowNo={page * PAGE_SIZE + i + 1} numCols={numCols} />
+                ))
+            }
           </tbody>
         </table>
       </div>
