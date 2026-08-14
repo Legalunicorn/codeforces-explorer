@@ -1,14 +1,24 @@
 // src/pages/Problemset.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchProblems } from "../context/problemset/problemsetSlice";
+import {
+  fetchProblems,
+  setFilters,
+} from "../context/problemset/problemsetSlice";
 import { useViewerProblems } from "../hooks/useViewerProblems";
 import CenteredLoader from "../ui/CenteredLoader";
 import ErrorPage from "./ErrorPage";
 import Pagination from "../components/Pagination";
 import FilterModal from "../components/FilterModal";
-import { Code, Link, Table, Button, DropdownMenu } from "@radix-ui/themes";
+import { Code, Link, Button, DropdownMenu } from "@radix-ui/themes";
 import { ratingColor } from "../utils/ratingColor";
+import {
+  clampPageNo,
+  createProblemsetSearchParams,
+  DEFAULT_PAGE_SIZE,
+  readProblemsetUrlState,
+} from "../utils/problemsetUrlState";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -22,14 +32,14 @@ function CensoredTag() {
   return (
     <span
       style={{
-        display:         "inline-block",
-        width:           "4rem",
-        height:          "1.1em",
+        display: "inline-block",
+        width: "4rem",
+        height: "1.1em",
         backgroundColor: "#2a2a2a",
-        borderRadius:    "3px",
-        border:          "0.3px solid #363a3f",
-        margin:          "0 2px",
-        verticalAlign:   "middle",
+        borderRadius: "3px",
+        border: "0.3px solid #363a3f",
+        margin: "0 2px",
+        verticalAlign: "middle",
       }}
     />
   );
@@ -37,31 +47,40 @@ function CensoredTag() {
 
 // Column widths — fixed so nothing ever shifts
 const COL = {
-  no:      36,
-  check:   32,
+  no: 36,
+  check: 32,
   problem: 340,
-  id:      90,
-  rating:  80,
-  solved:  80,
-  tags:    420, // always present; content masked or revealed
+  id: 90,
+  rating: 80,
+  solved: 80,
+  tags: 420, // always present; content masked or revealed
 };
 
 export default function Problemset() {
   const dispatch = useDispatch();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.toString();
+  const urlState = useMemo(
+    () => readProblemsetUrlState(new URLSearchParams(search)),
+    [search],
+  );
+  const skipUrlSync = useRef(false);
+  const hasAppliedUrlState = useRef(false);
+  const [isUrlHydrated, setIsUrlHydrated] = useState(false);
   const { problems, isLoading, errorMsg, filters } = useSelector(
     (store) => store.problemset,
   );
   const { isSolved } = useViewerProblems();
   const [maskRating, setMaskRating] = useState(false);
-  const [maskTags,   setMaskTags]   = useState(true);
+  const [maskTags, setMaskTags] = useState(true);
 
   useEffect(() => {
     dispatch(fetchProblems());
   }, [dispatch]);
 
-  const [sortField, setSortField] = useState(null);
-  const [sortDir,   setSortDir]   = useState("default");
-  const [orderDir,  setOrderDir]  = useState("asc");
+  const [sortField, setSortField] = useState(urlState.sortField);
+  const [sortDir, setSortDir] = useState(urlState.sortDir);
+  const [orderDir, setOrderDir] = useState(urlState.orderDir);
 
   function setSort(field, dir) {
     setSortField(field);
@@ -78,13 +97,16 @@ export default function Problemset() {
     return problems.filter((p) => {
       if (filters.hideUnrated && !p.rating) return false;
       if (p.rating) {
-        if (p.rating < filters.minRating || p.rating > filters.maxRating) return false;
+        if (p.rating < filters.minRating || p.rating > filters.maxRating)
+          return false;
       }
       if (filters.tags !== null) {
         if (!p.tags.some((t) => filters.tags.includes(t))) return false;
       }
-      if (filters.solveStatus === "solved"   && !isSolved(p.contestId, p.index)) return false;
-      if (filters.solveStatus === "unsolved" &&  isSolved(p.contestId, p.index)) return false;
+      if (filters.solveStatus === "solved" && !isSolved(p.contestId, p.index))
+        return false;
+      if (filters.solveStatus === "unsolved" && isSolved(p.contestId, p.index))
+        return false;
       return true;
     });
   }, [problems, filters, isSolved]);
@@ -103,32 +125,103 @@ export default function Problemset() {
     return list;
   }, [filtered, sortField, sortDir, orderDir]);
 
-  const [pageSize, setPageSize] = useState(100);
-  const [pageNo,   setPageNo]   = useState(0);
-  const [page,     setPage]     = useState([]);
+  const [pageSize, setPageSize] = useState(
+    urlState.pageSize || DEFAULT_PAGE_SIZE,
+  );
+  const [pageNo, setPageNo] = useState(urlState.pageNo);
+  const page = useMemo(
+    () => sorted.slice(pageNo * pageSize, pageNo * pageSize + pageSize),
+    [sorted, pageNo, pageSize],
+  );
 
-  useEffect(() => { setPageNo(0); }, [filters]);
+  // Query parameters override local storage, so a copied URL always restores
+  // the same shared view. When no filter parameters exist, the saved filters
+  // remain the backwards-compatible fallback.
   useEffect(() => {
-    setPage(sorted.slice(pageNo * pageSize, pageNo * pageSize + pageSize));
-  }, [sorted, pageNo, pageSize]);
+    if (hasAppliedUrlState.current) skipUrlSync.current = true;
+    setSortField(urlState.sortField);
+    setSortDir(urlState.sortDir);
+    setOrderDir(urlState.orderDir);
+    setPageSize(urlState.pageSize);
+    setPageNo(urlState.pageNo);
+    if (urlState.filters) dispatch(setFilters(urlState.filters));
+    hasAppliedUrlState.current = true;
+    setIsUrlHydrated(true);
+  }, [dispatch, urlState]);
+
+  // A shared URL can become out of range as Codeforces data changes. Clamp it
+  // after the data arrives instead of showing an empty, invalid page.
+  useEffect(() => {
+    if (problems.length === 0) return;
+    setPageNo((currentPageNo) =>
+      clampPageNo(currentPageNo, sorted.length, pageSize),
+    );
+  }, [problems.length, sorted.length, pageSize]);
+
+  useEffect(() => {
+    if (!isUrlHydrated) return;
+    if (skipUrlSync.current) {
+      skipUrlSync.current = false;
+      return;
+    }
+
+    const nextSearchParams = createProblemsetSearchParams({
+      pageNo,
+      pageSize,
+      sortField,
+      sortDir,
+      orderDir,
+      filters,
+    });
+    if (nextSearchParams.toString() !== search) {
+      setSearchParams(nextSearchParams, { replace: true });
+    }
+  }, [
+    filters,
+    isUrlHydrated,
+    orderDir,
+    pageNo,
+    pageSize,
+    search,
+    setSearchParams,
+    sortDir,
+    sortField,
+  ]);
 
   if (isLoading) return <CenteredLoader />;
-  if (errorMsg)  return <ErrorPage text={errorMsg} />;
+  if (errorMsg) return <ErrorPage text={errorMsg} />;
 
   function SortIcon({ field }) {
     if (sortField !== field || sortDir === "default")
       return <span className="ml-1 text-[#444]">↕</span>;
-    return sortDir === "asc"
-      ? <ArrowUpIcon className="ml-1 inline" />
-      : <ArrowDownIcon className="ml-1 inline" />;
+    return sortDir === "asc" ? (
+      <ArrowUpIcon className="ml-1 inline" />
+    ) : (
+      <ArrowDownIcon className="ml-1 inline" />
+    );
   }
 
   function SortDropdownContent({ field }) {
     return (
       <DropdownMenu.Content size="1">
-        <DropdownMenu.Item shortcut={<BarChartIcon />} onClick={() => setSort(field, "default")}>Default</DropdownMenu.Item>
-        <DropdownMenu.Item shortcut={<ArrowDownIcon />} onClick={() => setSort(field, "asc")}>Ascending</DropdownMenu.Item>
-        <DropdownMenu.Item shortcut={<ArrowUpIcon />}  onClick={() => setSort(field, "desc")}>Descending</DropdownMenu.Item>
+        <DropdownMenu.Item
+          shortcut={<BarChartIcon />}
+          onClick={() => setSort(field, "default")}
+        >
+          Default
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          shortcut={<ArrowDownIcon />}
+          onClick={() => setSort(field, "asc")}
+        >
+          Ascending
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          shortcut={<ArrowUpIcon />}
+          onClick={() => setSort(field, "desc")}
+        >
+          Descending
+        </DropdownMenu.Item>
       </DropdownMenu.Content>
     );
   }
@@ -137,17 +230,36 @@ export default function Problemset() {
     <div className="mt-6 sm:mx-4 lg:mx-14">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-3">
-          <FilterModal filteredCount={filtered.length} totalCount={problems.length} />
+          <FilterModal
+            filteredCount={filtered.length}
+            totalCount={problems.length}
+          />
 
-          <Button size="1" variant={maskRating ? "solid" : "soft"} color={maskRating ? "amber" : "gray"}
-            onClick={() => setMaskRating((v) => !v)}>
-            {maskRating ? <EyeNoneIcon width={13} height={13} /> : <EyeOpenIcon width={13} height={13} />}
+          <Button
+            size="1"
+            variant={maskRating ? "solid" : "soft"}
+            color={maskRating ? "amber" : "gray"}
+            onClick={() => setMaskRating((v) => !v)}
+          >
+            {maskRating ? (
+              <EyeNoneIcon width={13} height={13} />
+            ) : (
+              <EyeOpenIcon width={13} height={13} />
+            )}
             {maskRating ? "Ratings hidden" : "Hide ratings"}
           </Button>
 
-          <Button size="1" variant={maskTags ? "solid" : "soft"} color={maskTags ? "indigo" : "gray"}
-            onClick={() => setMaskTags((v) => !v)}>
-            {maskTags ? <EyeNoneIcon width={13} height={13} /> : <EyeOpenIcon width={13} height={13} />}
+          <Button
+            size="1"
+            variant={maskTags ? "solid" : "soft"}
+            color={maskTags ? "indigo" : "gray"}
+            onClick={() => setMaskTags((v) => !v)}
+          >
+            {maskTags ? (
+              <EyeNoneIcon width={13} height={13} />
+            ) : (
+              <EyeOpenIcon width={13} height={13} />
+            )}
             {maskTags ? "Tags hidden" : "Hide tags"}
           </Button>
 
@@ -161,8 +273,6 @@ export default function Problemset() {
           setPageSize={setPageSize}
           pageNo={pageNo}
           setPageNo={setPageNo}
-          page={page}
-          setPage={setPage}
           position="relative"
         />
       </div>
@@ -176,9 +286,9 @@ export default function Problemset() {
         <table
           style={{
             borderCollapse: "collapse",
-            tableLayout:    "fixed",
-            width:          "100%",
-            minWidth:       Object.values(COL).reduce((a, b) => a + b, 0),
+            tableLayout: "fixed",
+            width: "100%",
+            minWidth: Object.values(COL).reduce((a, b) => a + b, 0),
           }}
         >
           <colgroup>
@@ -194,20 +304,65 @@ export default function Problemset() {
           {/* ── Header ── */}
           <thead>
             <tr style={{ color: "#cccccc", borderBottom: "1px solid #363a3f" }}>
-              <th style={{ padding: "6px 8px", textAlign: "left", fontWeight: 600, fontSize: ".8rem" }}>No.</th>
-              <th style={{ padding: "6px 4px", textAlign: "left", fontWeight: 600, fontSize: ".8rem" }} title="Already solved by you">✓</th>
-              <th style={{ padding: "6px 8px", textAlign: "left", fontWeight: 600, fontSize: ".8rem" }}>Problem</th>
+              <th
+                style={{
+                  padding: "6px 8px",
+                  textAlign: "left",
+                  fontWeight: 600,
+                  fontSize: ".8rem",
+                }}
+              >
+                No.
+              </th>
+              <th
+                style={{
+                  padding: "6px 4px",
+                  textAlign: "left",
+                  fontWeight: 600,
+                  fontSize: ".8rem",
+                }}
+                title="Already solved by you"
+              >
+                ✓
+              </th>
+              <th
+                style={{
+                  padding: "6px 8px",
+                  textAlign: "left",
+                  fontWeight: 600,
+                  fontSize: ".8rem",
+                }}
+              >
+                Problem
+              </th>
 
               {/* ID */}
               <th style={{ padding: "6px 4px", textAlign: "left" }}>
                 <DropdownMenu.Root modal={false}>
                   <DropdownMenu.Trigger>
-                    <Button size="1" variant="soft" color="gray">ID <DropdownMenu.TriggerIcon /></Button>
+                    <Button size="1" variant="soft" color="gray">
+                      ID <DropdownMenu.TriggerIcon />
+                    </Button>
                   </DropdownMenu.Trigger>
                   <DropdownMenu.Content size="1">
-                    <DropdownMenu.Item shortcut={<BarChartIcon />} onClick={() => setOrder("asc")}>Default</DropdownMenu.Item>
-                    <DropdownMenu.Item shortcut={<ArrowDownIcon />} onClick={() => setOrder("asc")}>Ascending</DropdownMenu.Item>
-                    <DropdownMenu.Item shortcut={<ArrowUpIcon />}  onClick={() => setOrder("desc")}>Descending</DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      shortcut={<BarChartIcon />}
+                      onClick={() => setOrder("asc")}
+                    >
+                      Default
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      shortcut={<ArrowDownIcon />}
+                      onClick={() => setOrder("asc")}
+                    >
+                      Ascending
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      shortcut={<ArrowUpIcon />}
+                      onClick={() => setOrder("desc")}
+                    >
+                      Descending
+                    </DropdownMenu.Item>
                   </DropdownMenu.Content>
                 </DropdownMenu.Root>
               </th>
@@ -218,7 +373,9 @@ export default function Problemset() {
                   <DropdownMenu.Trigger>
                     <Button size="1" variant="soft" color="gray">
                       Rating
-                      {sortField === "rating" && sortDir !== "default" && <SortIcon field="rating" />}
+                      {sortField === "rating" && sortDir !== "default" && (
+                        <SortIcon field="rating" />
+                      )}
                       <DropdownMenu.TriggerIcon />
                     </Button>
                   </DropdownMenu.Trigger>
@@ -232,7 +389,9 @@ export default function Problemset() {
                   <DropdownMenu.Trigger>
                     <Button size="1" variant="soft" color="gray">
                       Solved
-                      {sortField === "solvedCount" && sortDir !== "default" && <SortIcon field="solvedCount" />}
+                      {sortField === "solvedCount" && sortDir !== "default" && (
+                        <SortIcon field="solvedCount" />
+                      )}
                       <DropdownMenu.TriggerIcon />
                     </Button>
                   </DropdownMenu.Trigger>
@@ -241,7 +400,15 @@ export default function Problemset() {
               </th>
 
               {/* Tags — always present */}
-              <th style={{ padding: "6px 8px", textAlign: "left", fontWeight: 600, fontSize: ".8rem", color: maskTags ? "#444" : "#cccccc" }}>
+              <th
+                style={{
+                  padding: "6px 8px",
+                  textAlign: "left",
+                  fontWeight: 600,
+                  fontSize: ".8rem",
+                  color: maskTags ? "#444" : "#cccccc",
+                }}
+              >
                 Tags
               </th>
             </tr>
@@ -257,41 +424,98 @@ export default function Problemset() {
                   : `https://codeforces.com/problemset/problem/${p.contestId}/${p.index}`;
 
               const rowStyle = {
-                color:           "#888888",
-                opacity:         done ? 0.55 : 1,
-                backgroundColor: done ? "rgba(34, 197, 94, 0.07)" : "transparent",
-                transition:      "opacity 0.15s ease, background-color 0.15s ease",
-                borderBottom:    "1px solid #1e2025",
+                color: "#888888",
+                opacity: done ? 0.55 : 1,
+                backgroundColor: done
+                  ? "rgba(34, 197, 94, 0.07)"
+                  : "transparent",
+                transition: "opacity 0.15s ease, background-color 0.15s ease",
+                borderBottom: "1px solid #1e2025",
               };
 
-              const cellStyle = { padding: "5px 8px", verticalAlign: "middle", overflow: "hidden" };
+              const cellStyle = {
+                padding: "5px 8px",
+                verticalAlign: "middle",
+                overflow: "hidden",
+              };
 
               return (
                 <tr key={`${p.contestId}-${p.index}`} style={rowStyle}>
-                  <td style={{ ...cellStyle, fontSize: ".8rem" }}>{pageNo * pageSize + index + 1}</td>
+                  <td style={{ ...cellStyle, fontSize: ".8rem" }}>
+                    {pageNo * pageSize + index + 1}
+                  </td>
                   <td style={{ ...cellStyle, padding: "5px 4px" }}>
-                    {done && <span style={{ color: "#22c55e", fontSize: 13, fontWeight: 700 }}>✓</span>}
+                    {done && (
+                      <span
+                        style={{
+                          color: "#22c55e",
+                          fontSize: 13,
+                          fontWeight: 700,
+                        }}
+                      >
+                        ✓
+                      </span>
+                    )}
                   </td>
-                  <td style={{ ...cellStyle, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    <Link href={href} target="_blank" style={{ whiteSpace: "nowrap" }}>{p.name}</Link>
-                  </td>
-                  <td style={{ ...cellStyle, whiteSpace: "nowrap" }}>
-                    <Link href={href} target="_blank" style={{ color: "#888888" }}>
-                      {p.contestId}{p.index}
+                  <td
+                    style={{
+                      ...cellStyle,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <Link
+                      href={href}
+                      target="_blank"
+                      style={{ whiteSpace: "nowrap" }}
+                    >
+                      {p.name}
                     </Link>
                   </td>
-                  <td style={{ ...cellStyle, color: maskRating ? "transparent" : ratingColor(p.rating ?? 0) }}>
+                  <td style={{ ...cellStyle, whiteSpace: "nowrap" }}>
+                    <Link
+                      href={href}
+                      target="_blank"
+                      style={{ color: "#888888" }}
+                    >
+                      {p.contestId}
+                      {p.index}
+                    </Link>
+                  </td>
+                  <td
+                    style={{
+                      ...cellStyle,
+                      color: maskRating
+                        ? "transparent"
+                        : ratingColor(p.rating ?? 0),
+                    }}
+                  >
                     {maskRating ? (
-                      <span style={{
-                        display: "inline-block", width: "2.5rem", height: "0.85em",
-                        backgroundColor: "#333", borderRadius: "3px", verticalAlign: "middle",
-                      }} />
-                    ) : (p.rating ?? "—")}
+                      <span
+                        style={{
+                          display: "inline-block",
+                          width: "2.5rem",
+                          height: "0.85em",
+                          backgroundColor: "#333",
+                          borderRadius: "3px",
+                          verticalAlign: "middle",
+                        }}
+                      />
+                    ) : (
+                      (p.rating ?? "—")
+                    )}
                   </td>
                   <td style={cellStyle}>{p.solvedCount.toLocaleString()}</td>
 
                   {/* Tags — always in DOM, content swapped */}
-                  <td style={{ ...cellStyle, whiteSpace: "nowrap", overflow: "hidden" }}>
+                  <td
+                    style={{
+                      ...cellStyle,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                    }}
+                  >
                     {maskTags
                       ? p.tags.map((tag, ix) => <CensoredTag key={tag + ix} />)
                       : p.tags.map((tag, ix) => (
