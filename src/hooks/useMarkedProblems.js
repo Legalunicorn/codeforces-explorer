@@ -1,7 +1,7 @@
-// src/hooks/useMarkedProblems.js
-import { useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const STORAGE_KEY = "cfe-marked-problems";
+const CHANGE_EVENT = "cfe-marked-problems-change";
 
 function load() {
   try {
@@ -11,23 +11,39 @@ function load() {
   }
 }
 
+function save(marked) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(marked));
+    window.dispatchEvent(new Event(CHANGE_EVENT));
+  } catch {}
+}
+
 /**
- * Returns [markedMap, toggle, isMarked, markAll, clearAll]
- *
- * problemKey convention: `${contestId}-${index}`  e.g. "1480-C"
+ * Returns [markedMap, toggle, isMarked, markAll, clearAll].
+ * problemKey convention: `${contestId}-${index}`, for example "1480-C".
  */
 export function useMarkedProblems() {
   const [marked, setMarked] = useState(load);
 
+  useEffect(() => {
+    function syncMarkedProblems() {
+      setMarked(load());
+    }
+
+    window.addEventListener("storage", syncMarkedProblems);
+    window.addEventListener(CHANGE_EVENT, syncMarkedProblems);
+    return () => {
+      window.removeEventListener("storage", syncMarkedProblems);
+      window.removeEventListener(CHANGE_EVENT, syncMarkedProblems);
+    };
+  }, []);
+
   const toggle = useCallback((problemKey) => {
-    setMarked((prev) => {
-      const next = { ...prev };
-      if (next[problemKey]) {
-        delete next[problemKey];
-      } else {
-        next[problemKey] = true;
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    setMarked((previous) => {
+      const next = { ...previous };
+      if (next[problemKey]) delete next[problemKey];
+      else next[problemKey] = true;
+      save(next);
       return next;
     });
   }, []);
@@ -37,20 +53,22 @@ export function useMarkedProblems() {
     [marked],
   );
 
-  // Merges new keys into existing marks (doesn't wipe previous ones)
   const markAll = useCallback((problemKeys) => {
-    setMarked((prev) => {
-      const next = { ...prev };
-      for (const key of problemKeys) {
+    setMarked((previous) => {
+      const next = { ...previous };
+      problemKeys.forEach((key) => {
         next[key] = true;
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      });
+      save(next);
       return next;
     });
   }, []);
 
   const clearAll = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      window.dispatchEvent(new Event(CHANGE_EVENT));
+    } catch {}
     setMarked({});
   }, []);
 

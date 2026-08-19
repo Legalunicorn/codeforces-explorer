@@ -11,6 +11,8 @@ import CenteredLoader from "../ui/CenteredLoader";
 import ErrorPage from "./ErrorPage";
 import Pagination from "../components/Pagination";
 import FilterModal from "../components/FilterModal";
+import ProblemStar from "../components/ProblemStar";
+import { useMarkedProblems } from "../hooks/useMarkedProblems";
 import { Code, Link, Button, DropdownMenu } from "@radix-ui/themes";
 import { ratingColor } from "../utils/ratingColor";
 import {
@@ -47,6 +49,7 @@ function CensoredTag() {
 
 // Column widths — fixed so nothing ever shifts
 const COL = {
+  star: 36,
   no: 36,
   check: 32,
   problem: 340,
@@ -71,6 +74,7 @@ export default function Problemset() {
     (store) => store.problemset,
   );
   const { isSolved } = useViewerProblems();
+  const [, toggleMarked, isMarked] = useMarkedProblems();
   const [maskRating, setMaskRating] = useState(false);
   const [maskTags, setMaskTags] = useState(true);
 
@@ -292,6 +296,7 @@ export default function Problemset() {
           }}
         >
           <colgroup>
+            <col style={{ width: COL.star }} />
             <col style={{ width: COL.no }} />
             <col style={{ width: COL.check }} />
             <col style={{ width: COL.problem }} />
@@ -304,6 +309,17 @@ export default function Problemset() {
           {/* ── Header ── */}
           <thead>
             <tr style={{ color: "#cccccc", borderBottom: "1px solid #363a3f" }}>
+              <th
+                style={{
+                  padding: "6px 4px",
+                  textAlign: "left",
+                  fontWeight: 600,
+                  fontSize: ".8rem",
+                }}
+                title="Starred problems"
+              >
+                ★
+              </th>
               <th
                 style={{
                   padding: "6px 8px",
@@ -418,6 +434,7 @@ export default function Problemset() {
           <tbody>
             {page.map((p, index) => {
               const done = isSolved(p.contestId, p.index);
+              const starred = isMarked(`${p.contestId}-${p.index}`);
               const href =
                 p.contestId > 10000
                   ? `https://codeforces.com/problemset/gymProblem/${p.contestId}/${p.index}`
@@ -428,7 +445,9 @@ export default function Problemset() {
                 opacity: done ? 0.55 : 1,
                 backgroundColor: done
                   ? "rgba(34, 197, 94, 0.07)"
-                  : "transparent",
+                  : starred
+                    ? "rgba(251, 191, 36, 0.08)"
+                    : "transparent",
                 transition: "opacity 0.15s ease, background-color 0.15s ease",
                 borderBottom: "1px solid #1e2025",
               };
@@ -441,6 +460,13 @@ export default function Problemset() {
 
               return (
                 <tr key={`${p.contestId}-${p.index}`} style={rowStyle}>
+                  <td style={{ ...cellStyle, padding: "5px 4px" }}>
+                    <ProblemStar
+                      problemKey={`${p.contestId}-${p.index}`}
+                      isStarred={starred}
+                      onToggle={toggleMarked}
+                    />
+                  </td>
                   <td style={{ ...cellStyle, fontSize: ".8rem" }}>
                     {pageNo * pageSize + index + 1}
                   </td>

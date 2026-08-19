@@ -1,9 +1,15 @@
 // src/components/TableSubmissions.jsx
 import { Button, Code, DropdownMenu, Link, Table } from "@radix-ui/themes";
 import { useEffect, useState } from "react";
-import { ArrowDownIcon, ArrowUpIcon, BarChartIcon } from "@radix-ui/react-icons";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  BarChartIcon,
+} from "@radix-ui/react-icons";
 import Pagination from "./Pagination";
 import { ratingColor } from "../utils/ratingColor";
+import { useMarkedProblems } from "../hooks/useMarkedProblems";
+import ProblemStar from "./ProblemStar";
 
 // A fixed-width censored pill — same visual footprint regardless of tag text length
 function CensoredTag() {
@@ -29,6 +35,7 @@ export default function TableSubmissions({
   maskRating = false,
   maskTags = true,
 }) {
+  const [, toggleMarked, isMarked] = useMarkedProblems();
   const [tempq, setTempq] = useState(data);
 
   useEffect(() => {
@@ -81,8 +88,13 @@ export default function TableSubmissions({
       <Table.Root size="1">
         <Table.Header>
           <Table.Row style={{ color: "#cccccc" }}>
+            <Table.ColumnHeaderCell title="Starred problems">
+              ★
+            </Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>No.</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell title="Already solved by you">✓</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell title="Already solved by you">
+              ✓
+            </Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell>Problem</Table.ColumnHeaderCell>
             <Table.Cell px={"0"}>
               <DropdownMenu.Root modal={false}>
@@ -116,11 +128,7 @@ export default function TableSubmissions({
             <Table.ColumnHeaderCell>Division</Table.ColumnHeaderCell>
             {/* Tags column always present — header label changes when masked */}
             <Table.ColumnHeaderCell>
-              {maskTags ? (
-                <span className="text-[#555]">Tags</span>
-              ) : (
-                "Tags"
-              )}
+              {maskTags ? <span className="text-[#555]">Tags</span> : "Tags"}
             </Table.ColumnHeaderCell>
           </Table.Row>
         </Table.Header>
@@ -128,6 +136,7 @@ export default function TableSubmissions({
         <Table.Body style={{ color: "#888888" }}>
           {page.map((it, index) => {
             const done = isSolved(it.contestId, it.index);
+            const starred = isMarked(`${it.contestId}-${it.index}`);
 
             return (
               <Table.Row
@@ -137,11 +146,19 @@ export default function TableSubmissions({
                   opacity: done ? 0.55 : 1,
                   backgroundColor: done
                     ? "rgba(34, 197, 94, 0.07)"
-                    : "transparent",
-                  transition:
-                    "opacity 0.15s ease, background-color 0.15s ease",
+                    : starred
+                      ? "rgba(251, 191, 36, 0.08)"
+                      : "transparent",
+                  transition: "opacity 0.15s ease, background-color 0.15s ease",
                 }}
               >
+                <Table.Cell width={"1px"}>
+                  <ProblemStar
+                    problemKey={`${it.contestId}-${it.index}`}
+                    isStarred={starred}
+                    onToggle={toggleMarked}
+                  />
+                </Table.Cell>
                 <Table.Cell width={"1px"}>
                   {pageNo * pageSize + index + 1}
                 </Table.Cell>
@@ -172,9 +189,7 @@ export default function TableSubmissions({
 
                 <Table.Cell
                   style={{
-                    color: maskRating
-                      ? "transparent"
-                      : ratingColor(it.rating),
+                    color: maskRating ? "transparent" : ratingColor(it.rating),
                   }}
                 >
                   {maskRating ? (
